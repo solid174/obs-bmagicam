@@ -1,0 +1,117 @@
+name: Load Test
+on:
+  workflow_call:
+env:
+  OBS_VERSION: 32.2.2
+jobs:
+  ubuntu:
+    name: Load in OBS on Ubuntu 🐧
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-ubuntu-24.04-x86_64-*'
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Install OBS and the Plugin 🛍️
+        run: |
+          : Install OBS and the Plugin 🛍️
+          sudo add-apt-repository --yes ppa:obsproject/obs-studio
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends obs-studio xvfb
+          sudo apt-get install --yes "$(find "${RUNNER_TEMP}/artifacts" -name '*-x86_64-linux-gnu.deb')"
+
+          mkdir -p ~/.config/obs-studio
+          printf '[General]\nFirstRun=true\n' > ~/.config/obs-studio/user.ini
+
+      - name: Start OBS 🚀
+        run: .github/scripts/load-test ~/.config/obs-studio/logs obs xvfb-run --auto-servernum obs --disable-missing-files-check
+
+  macos:
+    name: Load in OBS on macOS 🍏
+    runs-on: macos-26
+    defaults:
+      run:
+        shell: zsh --no-rcs --errexit --pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-macos-universal-*'
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Install OBS and the Plugin 🛍️
+        run: |
+          : Install OBS and the Plugin 🛍️
+          curl --fail --location --silent --show-error --output "${RUNNER_TEMP}/obs.dmg" \
+            "https://github.com/obsproject/obs-studio/releases/download/${OBS_VERSION}/OBS-Studio-${OBS_VERSION}-macOS-Apple.dmg"
+          hdiutil attach -nobrowse -readonly -mountpoint "${RUNNER_TEMP}/obs" "${RUNNER_TEMP}/obs.dmg"
+
+          installer -pkg "$(find "${RUNNER_TEMP}/artifacts" -name '*-macos-universal.pkg')" -target CurrentUserHomeDirectory
+
+          local config_dir=~/Library/Application\ Support/obs-studio
+          mkdir -p "${config_dir}"
+          printf '[General]\nMacOSPermissionsDialogLastShown=1\n' > "${config_dir}/global.ini"
+          printf '[General]\nFirstRun=true\n' > "${config_dir}/user.ini"
+
+      - name: Start OBS 🚀
+        run: |
+          : Start OBS 🚀
+          .github/scripts/load-test ~/Library/Application\ Support/obs-studio/logs OBS \
+            "${RUNNER_TEMP}/obs/OBS.app/Contents/MacOS/OBS" --disable-updater --disable-missing-files-check
+
+  windows:
+    name: Load in OBS on Windows 🪟
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-windows-x64-*'
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Install OBS and the Plugin 🛍️
+        run: |
+          # Install OBS and the Plugin 🛍️
+          $ProgressPreference = 'SilentlyContinue'
+          $ObsZip = "${env:RUNNER_TEMP}/obs.zip"
+          Invoke-WebRequest -Uri "https://github.com/obsproject/obs-studio/releases/download/${env:OBS_VERSION}/OBS-Studio-${env:OBS_VERSION}-Windows-x64.zip" -OutFile $ObsZip
+          Expand-Archive -Path $ObsZip -DestinationPath "${env:RUNNER_TEMP}/obs"
+
+          $PluginZip = Get-ChildItem -Path "${env:RUNNER_TEMP}/artifacts" -Recurse -Filter '*-windows-x64.zip' | Select-Object -First 1
+          Expand-Archive -Path $PluginZip.FullName -DestinationPath "${env:ProgramData}/obs-studio/plugins"
+
+          New-Item -ItemType Directory -Force -Path "${env:APPDATA}/obs-studio" | Out-Null
+          Set-Content -Path "${env:APPDATA}/obs-studio/user.ini" -Value "[General]`nFirstRun=true"
+
+      - name: Start OBS 🚀
+        run: |
+          # Start OBS 🚀
+          $Obs = Get-ChildItem -Path "${env:RUNNER_TEMP}/obs" -Recurse -Filter 'obs64.exe' | Select-Object -First 1
+          $Process = Start-Process -FilePath $Obs.FullName -WorkingDirectory $Obs.DirectoryName -PassThru `
+            -ArgumentList '--disable-updater', '--disable-missing-files-check'
+
+          $LogDir = "${env:APPDATA}/obs-studio/logs"
+          $Log = $null
+          for ($i = 0; $i -lt 120; $i++) {
+            $Log = Get-ChildItem -Path $LogDir -Filter '*.txt' -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($Log -and (Select-String -Path $Log.FullName -Pattern '==== Startup complete' -Quiet)) { break }
+            if ($Process.HasExited) { break }
+            Start-Sleep -Seconds 1
+          }
+          Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+
+          if (-not $Log) { throw 'OBS wrote no log' }
+          Get-Content -Path $Log.FullName
+          if (-not (Select-String -Path $Log.FullName -Pattern '\[obs-bmagicam\] plugin loaded successfully' -Quiet)) {
+            throw 'obs-bmagicam did not load in OBS'
+          }

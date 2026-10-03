@@ -25,11 +25,18 @@ jobs:
     permissions:
       contents: read
 
+  load-test:
+    name: Load Test 🔌
+    needs: build-project
+    uses: ./.github/workflows/load-test.yaml
+    permissions:
+      contents: read
+
   create-release:
     name: Create Release 🛫
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
-    needs: build-project
+    needs: [build-project, load-test]
     defaults:
       run:
         shell: bash

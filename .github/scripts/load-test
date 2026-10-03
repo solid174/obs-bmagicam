@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Starts OBS, waits until its startup is complete, stops it, and checks in its log that obs-bmagicam loaded.
+#
+# Usage: load-test <log directory> <OBS process name> <command that starts OBS...>
+
+set -euo pipefail
+
+log_dir=$1
+process_name=$2
+shift 2
+
+"$@" > "${RUNNER_TEMP:-/tmp}/obs-output.txt" 2>&1 &
+obs_pid=$!
+
+log=''
+for _ in $(seq 1 120); do
+  log=$(ls -t "${log_dir}"/*.txt 2> /dev/null | head -n 1 || true)
+  if [[ -n ${log} ]] && grep -q '==== Startup complete' "${log}"; then
+    break
+  fi
+  if ! kill -0 "${obs_pid}" 2> /dev/null; then
+    break
+  fi
+  sleep 1
+done
+
+pkill -x "${process_name}" || true
+wait "${obs_pid}" 2> /dev/null || true
+
+if [[ -z ${log} ]]; then
+  echo '::error::OBS wrote no log. Its output:'
+  cat "${RUNNER_TEMP:-/tmp}/obs-output.txt"
+  exit 1
+fi
+
+cat "${log}"
+
+if ! grep -q '\[obs-bmagicam\] plugin loaded successfully' "${log}"; then
+  echo '::error::obs-bmagicam did not load in OBS'
+  exit 1
+fi
