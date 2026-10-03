@@ -4,20 +4,6 @@ include_guard(GLOBAL)
 
 set(CMAKE_XCODE_GENERATE_SCHEME TRUE)
 
-# Use a compiler wrapper to enable ccache in Xcode projects
-if(ENABLE_CCACHE AND CCACHE_PROGRAM)
-  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/macos/resources/ccache-launcher-c.in" ccache-launcher-c)
-  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/macos/resources/ccache-launcher-cxx.in" ccache-launcher-cxx)
-
-  execute_process(
-    COMMAND chmod a+rx "${CMAKE_CURRENT_BINARY_DIR}/ccache-launcher-c" "${CMAKE_CURRENT_BINARY_DIR}/ccache-launcher-cxx"
-  )
-  set(CMAKE_XCODE_ATTRIBUTE_CC "${CMAKE_CURRENT_BINARY_DIR}/ccache-launcher-c")
-  set(CMAKE_XCODE_ATTRIBUTE_CXX "${CMAKE_CURRENT_BINARY_DIR}/ccache-launcher-cxx")
-  set(CMAKE_XCODE_ATTRIBUTE_LD "${CMAKE_C_COMPILER}")
-  set(CMAKE_XCODE_ATTRIBUTE_LDPLUSPLUS "${CMAKE_CXX_COMPILER}")
-endif()
-
 # Set project variables
 set(CMAKE_XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION ${PLUGIN_BUILD_NUMBER})
 set(CMAKE_XCODE_ATTRIBUTE_DYLIB_COMPATIBILITY_VERSION 1.0.0)
@@ -111,10 +97,10 @@ set(CMAKE_XCODE_ATTRIBUTE_GCC_STRICT_ALIASING NO)
 #
 # set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD c++17)
 
-# Enable support for module imports in ObjC
-set(CMAKE_XCODE_ATTRIBUTE_CLANG_ENABLE_MODULES YES)
-# Enable automatic linking of imported modules in ObjC
-set(CMAKE_XCODE_ATTRIBUTE_CLANG_MODULES_AUTOLINK YES)
+# Disable support for module imports in ObjC
+set(CMAKE_XCODE_ATTRIBUTE_CLANG_ENABLE_MODULES NO)
+# Disable automatic linking of imported modules in ObjC
+set(CMAKE_XCODE_ATTRIBUTE_CLANG_MODULES_AUTOLINK NO)
 # Enable strict msg_send rules for ObjC
 set(CMAKE_XCODE_ATTRIBUTE_ENABLE_STRICT_OBJC_MSGSEND YES)
 
@@ -159,7 +145,7 @@ set(CMAKE_XCODE_ATTRIBUTE_GCC_WARN_UNUSED_VALUE YES)
 set(CMAKE_XCODE_ATTRIBUTE_GCC_WARN_UNUSED_VARIABLE YES)
 
 # Add additional warning compiler flags
-set(CMAKE_XCODE_ATTRIBUTE_WARNING_CFLAGS "-Wvla -Wformat-security")
+set(CMAKE_XCODE_ATTRIBUTE_WARNING_CFLAGS "-Wvla -Wformat-security -Wno-error=shorten-64-to-32")
 
 if(CMAKE_COMPILE_WARNING_AS_ERROR)
   set(CMAKE_XCODE_ATTRIBUTE_GCC_TREAT_WARNINGS_AS_ERRORS YES)
