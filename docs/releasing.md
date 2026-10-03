@@ -54,6 +54,7 @@ The template's workflows stay as they are:
 
 Added for this project:
 
+- **Load test** (`load-test.yaml`) after every push build: on each platform it installs the package the way a user would (the `.deb`, the `.pkg` into the home folder, the `.zip` into ProgramData), starts the released OBS 32.2 with a fresh configuration, waits for "Startup complete" and checks OBS's log for the plugin's load message. GitHub's runners have no GPU, so OBS renders in software (Microsoft Basic Render Driver, Apple Software Renderer, Mesa llvmpipe), which is enough to load modules. A release is only drafted when the load test passes.
 - **Unit tests** with CTest on all three runners, for the parts that need no phone and no OBS: Streaming XML generation, phone JSON mapping, the write coalescer, control descriptors, timestamp mapping, look files.
 - **Windows installer** built after the `.zip`.
 - **License notices** collected into every package (LIC-3).
