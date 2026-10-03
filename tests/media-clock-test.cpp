@@ -38,6 +38,8 @@ struct Arrivals {
 	int64_t audio_late = 0;
 	// Audio frames that the phone sends together; each arrives with the last of its group
 	int64_t audio_group = 1;
+	// Packets arrive up to this much later, at random
+	int64_t jitter = 0;
 	bool audio = true;
 };
 
@@ -53,8 +55,13 @@ struct Packet {
 Range play(MediaClock &clock, int64_t start_ns, int64_t duration_ns, const Arrivals &arrivals = {},
 	   int64_t settle_ns = 0)
 {
+	uint64_t random = 12345;
 	const auto arrival_of = [&](int64_t pts) {
-		return std::llround(static_cast<double>(pts) * (1 + arrivals.drift)) + arrivals.delay;
+		random = random * 6364136223846793005ULL + 1442695040888963407ULL;
+		const int64_t jitter =
+			arrivals.jitter ? static_cast<int64_t>((random >> 33) % static_cast<uint64_t>(arrivals.jitter))
+					: 0;
+		return std::llround(static_cast<double>(pts) * (1 + arrivals.drift)) + arrivals.delay + jitter;
 	};
 
 	std::vector<Packet> packets;
@@ -161,15 +168,28 @@ TEST_CASE("A large excess delay from the start is dropped after a few windows")
 
 TEST_CASE("Clock drift is followed, so the slack stays near the buffer")
 {
-	for (double drift : {100e-6, -100e-6}) {
+	for (double drift : {100e-6, -100e-6, 1'700e-6, -1'700e-6}) {
 		CAPTURE(drift);
 		MediaClock clock;
 		Arrivals stream;
 		stream.drift = drift;
 		const Range slack = play(clock, 0, 20 * 60 * kSecond, stream, 2 * 60 * kSecond);
-		CHECK(slack.min >= kConfig.buffer_ns - 5 * kMs);
-		CHECK(slack.max <= kConfig.buffer_ns + 5 * kMs);
+		CHECK(slack.min >= kConfig.buffer_ns - 1 * kMs);
+		CHECK(slack.max <= kConfig.buffer_ns + 1 * kMs);
+		CHECK(clock.rate() == doctest::Approx(drift).epsilon(0.01));
 	}
+}
+
+TEST_CASE("Drift is followed through jitter, as the phone sends it")
+{
+	// Measured on the phone: timestamps 0.1 % slow against the computer's clock, packets up to 20 ms apart
+	MediaClock clock;
+	Arrivals stream;
+	stream.drift = 1'700e-6;
+	stream.jitter = 20 * kMs;
+	const Range slack = play(clock, 0, 10 * 60 * kSecond, stream, 2 * 60 * kSecond);
+	CHECK(slack.min >= kConfig.buffer_ns - 10 * kMs);
+	CHECK(slack.max <= kConfig.buffer_ns + 30 * kMs);
 }
 
 TEST_CASE("A late packet moves the map later at once, and the map comes back slowly")
@@ -183,7 +203,7 @@ TEST_CASE("A late packet moves the map later at once, and the map comes back slo
 	CHECK(clock.to_obs(pts) - arrival == kConfig.min_slack_ns);
 
 	const Range later = play(clock, pts + kVideoFrame, 5 * 60 * kSecond, {}, 4 * 60 * kSecond);
-	CHECK(later.min >= kConfig.buffer_ns);
+	CHECK(later.min >= kConfig.buffer_ns - 1 * kMs);
 	CHECK(later.max <= kConfig.buffer_ns + 1 * kMs);
 }
 

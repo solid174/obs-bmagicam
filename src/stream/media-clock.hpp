@@ -12,11 +12,13 @@ namespace bmagicam {
 // A timestamp maps to itself plus the transport delay plus a fixed buffer. The transport delay is the greatest delay
 // of the packets relative to their timestamps, over both streams: every packet has to arrive before it is presented,
 // including the last one of a burst. It settles right after the phone connects, from the packets that arrive once both
-// streams are there and the burst after connecting is over, and then follows the greatest delay window by window, which
-// also absorbs the drift between
-// the phone's clock and the computer's. It follows by small steps, which the audio absorbs by stretching, except that
-// a large excess that lasts is dropped at once. A packet that would arrive with less than the minimum slack before its
-// presentation time moves the map later at once.
+// streams are there and the burst after connecting is over.
+//
+// Afterwards the delay changes at a rate of its own: the phone's timestamps run slower or faster than the computer's
+// clock, by as much as 0.1 %. A loop measures per window how far the latest packet came beyond the map and corrects
+// both the delay and its rate, so that a steady drift is followed without lag. A packet that would arrive with less
+// than the minimum slack before its presentation time moves the map later at once; a large excess that lasts is
+// dropped at once.
 class MediaClock {
 public:
 	enum class Stream { Audio, Video };
@@ -32,11 +34,14 @@ public:
 		int64_t settle_ns = 300'000'000;
 		// ...or this long after the first packet, for a stream without audio
 		int64_t max_settle_ns = 1'000'000'000;
-		// Length of the windows over which the delay is followed
+		// Length of the windows over which the map is corrected
 		int64_t window_ns = 1'000'000'000;
-		// Time constant with which the map follows the transport delay
-		int64_t follow_ns = 30'000'000'000;
-		// Largest step by which the map follows, per window
+		// Loop gains: share of a window's error per second that corrects the delay, and that corrects its rate
+		double delay_gain = 0.2;
+		double rate_gain = 0.005;
+		// Largest rate at which the delay may change: 0.3 %
+		double max_rate = 0.003;
+		// Largest correction of the delay per window
 		int64_t max_step_ns = 3'000'000;
 		// An excess delay larger than this, for this many windows in a row, is dropped at once
 		int64_t drop_excess_ns = 100'000'000;
@@ -57,23 +62,31 @@ public:
 	bool settled() const { return settled_; }
 
 	// OBS time at which the given timestamp is presented.
-	int64_t to_obs(int64_t pts_ns) const { return pts_ns + delay_ + config_.buffer_ns; }
+	int64_t to_obs(int64_t pts_ns) const { return pts_ns + delay_at(pts_ns) + config_.buffer_ns; }
+
+	// Rate at which the transport delay changes, in OBS time per stream time.
+	double rate() const { return rate_; }
 
 private:
 	static constexpr int64_t kNone = INT64_MIN;
 
-	// The greatest delay of any packet in the current window
-	int64_t window_max_delay() const;
+	// The transport delay the map assumes for a timestamp
+	int64_t delay_at(int64_t pts_ns) const;
+	// Moves the anchor of the map to the timestamp, without moving the map
+	void anchor(int64_t pts_ns);
 	void start_window(int64_t arrival_ns);
 
 	Config config_;
 	bool started_ = false;
 	bool settled_ = false;
 	int64_t delay_ = 0;
+	int64_t anchor_pts_ = 0;
+	double rate_ = 0;
 	int64_t start_ = 0;
 	int64_t first_arrival_[2] = {kNone, kNone};
 	int64_t window_start_ = 0;
-	int64_t window_max_delay_[2] = {kNone, kNone};
+	// The greatest delay of the window's packets (while settling), and the furthest any came beyond the map (after)
+	int64_t window_max_ = kNone;
 	int excess_windows_ = 0;
 };
 
