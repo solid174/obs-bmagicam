@@ -314,12 +314,23 @@ As received from the phone over SRT:
 | --- | --- |
 | Container | MPEG-TS |
 | Video codec | HEVC Main, 8-bit 4:2:0, BT.709 limited range, while the camera recorded HEVC. The profile asked for `H264` and was ignored; see V-3 |
-| Resolution | Follows the camera video format: `1920x1080p60` gave 1920×1080, `3840x2160p60` gave 3840×2160. In vertical mode (`1214x2160p60`) the stream was 1920×1080 landscape |
+| Resolution | Follows the camera video format: `1920x1080p60` gave 1920×1080, `3840x2160p60` gave 3840×2160. In vertical mode (`1214x2160p60`) the stream was 1920×1080 landscape in two runs; in a third, starting the stream switched the camera to `3840x2160p60` and streamed 3840×2160 (V-4) |
 | Frame rate | 60.00 fps, constant: 721 frames in 12.000 s, every frame 16.66–16.67 ms apart |
 | GOP | Keyframe every 1.0 s, I and P frames only (no B-frames) |
 | Bitrate | Follows the profile: 12 Mb/s requested, 11.7–12.4 Mb/s measured |
 | Audio | AAC-LC, 48 kHz, stereo |
 | Integrity | No transport stream errors in three 30 s captures; one damaged AAC frame in one of them |
+
+Timing as the plugin's receiver saw it (two runs on the test hotspot, 40 s at 3840×2160 and 70 s at 1920×1080, both 12 Mb/s):
+
+| Property | Observed |
+| --- | --- |
+| Audio against video | Relative to their timestamps, video arrives 15–35 ms later than audio, so video sets the receiver's delay (V-18) |
+| Start of a stream | The phone first sends what it held before the connection: the first packet's timestamp was 1.8 s older than its arrival suggests, and about 1.8 s of frames came at once. The receiver skips them |
+| Timestamps against the computer's clock | At 3840×2160, arrival ran 0.08–0.10 % ahead of the timestamps, in audio and video alike, so the phone's timestamps ran slow. At 1920×1080, −0.009 %, ordinary clock drift. The receiver follows both |
+| Jitter | Within a second, packets arrive up to 20–35 ms apart relative to their timestamps |
+| Decoding | HEVC 1920×1080 with VideoToolbox on the test Mac: 4.9 ms per frame including the copy to system memory, 5.7 ms at the 99th percentile |
+| End of a stream | The last packet is cut off when the phone stops, so the receiver reads an error; it is the end of the stream |
 
 ## Latency
 
@@ -356,3 +367,5 @@ What this means:
 - A custom destination is renamed to `<service name> SRT`, and later calls must use that name.
 - The livestream ignored the profile's `codec` attribute and its resolution: it followed the camera's codec and video format.
 - The server pauses for a few seconds after a video format change.
+- Starting the livestream in vertical mode once switched the camera's video format to `3840x2160p60`, and it stayed so after the stream stopped. The plugin sets the format from the stream preset anyway, and its before snapshot keeps the user's format.
+- The first request after a pause sometimes times out; the next one answers. The client retries.

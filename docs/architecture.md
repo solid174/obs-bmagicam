@@ -142,11 +142,11 @@ NFR-6 puts sync before latency. The phone stamps audio and video with one clock 
 
 - **One mapping** (`MediaClock`). A timestamp maps to itself plus the transport delay plus a 50 ms buffer, for audio and video alike. The transport delay is the greatest delay of any packet relative to its timestamp, over both streams, so the stream that arrives later, and the last packet of a burst, are still on time.
 - **Settling.** Right after the phone connects, nothing is presented. The delay is measured once both streams are there and the burst of packets that follows the connection (200 ms) is over, for 300 ms, or for one second for a stream without audio. The first frame is then already on the final timeline.
-- **Following.** Afterwards the delay follows the greatest delay per one-second window with a 30-second time constant, by at most 3 ms per window, which absorbs the drift between the phone's and the computer's clocks (tens of ppm). A packet that would arrive less than 10 ms before its presentation moves the map later at once; an excess of more than 100 ms that lasts three windows is dropped at once.
+- **Following.** The phone's timestamps run slower or faster than the computer's clock: by tens of ppm normally, and by 0.1 % at 4K on the test phone ([camera-api.md](camera-api.md#the-stream)). Per one-second window, a loop measures how far the latest packet came beyond the map and corrects both the delay (by a fifth of the error, at most 3 ms per window) and the rate at which the delay changes, so a steady drift is followed without lag. A packet that would arrive less than 10 ms before its presentation moves the map later at once; an excess of more than 100 ms that lasts three windows is dropped at once.
 - **Gapless audio.** Audio goes to OBS without gaps. It follows the mapping by stretching or squeezing by at most 0.5 % (libswresample's compensation), so OBS never has to drop or insert audio; only a difference of more than 20 ms is closed with a jump.
 - **Video on time.** Each frame goes to OBS at its presentation time, so OBS shows it in step with the audio.
 - **Reconnect.** A new stream gets a new mapping before its first frame is shown, so a broken stream's timing never carries over.
-- **Measured, not assumed.** A loopback test plays a 1080p60 HEVC + AAC stream with a white flash and a beep at the same timestamp every second into the receiver over SRT. Over 110 seconds, the beep reached OBS's timeline within 1.1 ms of its flash, with the sender's clock exact or off by ±300 ppm, no frame late after startup and no gap in the audio. V-16 still measures the phone with a clap test, one sharp event that is both seen and heard, in a recording at the start and after two hours.
+- **Measured, not assumed.** A loopback test plays a 1080p60 HEVC + AAC stream with a white flash and a beep at the same timestamp every second into the receiver over SRT. Over 110 seconds, the beep reached OBS's timeline within 1.1 ms of its flash, with the sender's clock exact or off by ±300 ppm, no frame late after startup and no gap in the audio. On the real phone, 70 s at 1080p60 went through with no late or dropped frame after startup and no gap in the audio, every frame handed over within 2.6 ms of its time. V-16 still measures the phone's lip sync with a clap test, one sharp event that is both seen and heard, in a recording at the start and after two hours.
 
 ### FFmpeg ABI
 
@@ -168,11 +168,11 @@ Measured on the test phone ([camera-api.md](camera-api.md#latency)):
 | --- | --- |
 | Sound or light reaches the phone → packet arrives at the PC (1080p60, audio path; includes the 50–120 ms SRT buffer and the test's speaker delay) | about 350 ms |
 | Buffer after the latest packet, which also covers decoding ([Audio and video sync](#audio-and-video-sync)) | 50 ms |
-| Lag of the later stream in the phone's muxing, if any (V-18) | unknown |
+| Video arrives later than the measured audio, relative to the timestamps (V-18) | 15–35 ms |
 | OBS render and display (one or two frames at 60 fps) | 17–33 ms |
 | For comparison: the same through OBS's Media Source instead of the plugin's receiver | about 1240 ms |
 
-That is about 420 ms end to end at 1080p60, a little over the NFR-2 target. The speaker delay inside the 350 ms is unknown, so V-1 measures video glass to glass, and V-2 and V-11 look for savings on the phone side. 4K adds about 180 ms (measured).
+That is about 440–470 ms end to end at 1080p60, over the NFR-2 target of 400 ms. The speaker delay inside the 350 ms is unknown, so V-1 measures video glass to glass, and V-2 and V-11 look for savings on the phone side. The 50 ms buffer has room too: decoding takes 5 ms at 1080p, so it is tuned down once V-1 shows the margin. 4K adds about 180 ms (measured).
 
 ## Looks
 
@@ -338,7 +338,7 @@ To settle in development, in the milestone named:
 | V-15 | Stabilization: how the API sets the app's modes Off, Standard, Cinematic and Extreme (`/lens/opticalImageStabilization` has only `enabled`), how much each crops, and whether a mode adds delay to the livestream | M1 |
 | V-16 | Lip sync: offset between sound and picture in a recording, at the start and after two hours, against NFR-6 | M1 |
 | V-17 | Does the app's Remote Password (Settings → Remote Camera Control) protect the HTTP API, and how is it sent? | M1 |
-| V-18 | How far apart audio and video arrive relative to their timestamps in the phone's stream; the later one sets the delay | M1 |
+| V-18 | How far apart audio and video arrive relative to their timestamps in the phone's stream. Answered: video 15–35 ms after audio, so video sets the delay and audio adds none | M1 |
 
 ## Decided after measurement
 
