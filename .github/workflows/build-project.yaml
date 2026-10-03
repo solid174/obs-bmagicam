@@ -120,6 +120,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ccache-
 
+      - uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.deps
+          key: ${{ runner.os }}-deps-${{ hashFiles('buildspec.json') }}
+
       - name: Set Up Codesigning 🔑
         uses: ./.github/actions/setup-macos-codesigning
         if: fromJSON(needs.check-event.outputs.codesign)
@@ -288,6 +293,11 @@ jobs:
 
           "pluginName=${ProductName}" >> $env:GITHUB_OUTPUT
           "pluginVersion=${ProductVersion}" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.deps
+          key: ${{ runner.os }}-deps-${{ hashFiles('buildspec.json') }}
 
       - name: Build Plugin 🧱
         uses: ./.github/actions/build-plugin

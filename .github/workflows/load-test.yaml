@@ -46,11 +46,18 @@ jobs:
           pattern: '*-macos-universal-*'
           path: ${{ runner.temp }}/artifacts
 
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/obs.dmg
+          key: obs-${{ env.OBS_VERSION }}-macos-apple
+
       - name: Install OBS and the Plugin 🛍️
         run: |
           : Install OBS and the Plugin 🛍️
-          curl --fail --location --silent --show-error --output "${RUNNER_TEMP}/obs.dmg" \
-            "https://github.com/obsproject/obs-studio/releases/download/${OBS_VERSION}/OBS-Studio-${OBS_VERSION}-macOS-Apple.dmg"
+          if [[ ! -f "${RUNNER_TEMP}/obs.dmg" ]] {
+            curl --fail --location --silent --show-error --output "${RUNNER_TEMP}/obs.dmg" \
+              "https://github.com/obsproject/obs-studio/releases/download/${OBS_VERSION}/OBS-Studio-${OBS_VERSION}-macOS-Apple.dmg"
+          }
           hdiutil attach -nobrowse -readonly -mountpoint "${RUNNER_TEMP}/obs" "${RUNNER_TEMP}/obs.dmg"
 
           installer -pkg "$(find "${RUNNER_TEMP}/artifacts" -name '*-macos-universal.pkg')" -target CurrentUserHomeDirectory
@@ -78,12 +85,19 @@ jobs:
           pattern: '*-windows-x64-*'
           path: ${{ runner.temp }}/artifacts
 
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/obs.zip
+          key: obs-${{ env.OBS_VERSION }}-windows-x64
+
       - name: Install OBS and the Plugin 🛍️
         run: |
           # Install OBS and the Plugin 🛍️
           $ProgressPreference = 'SilentlyContinue'
           $ObsZip = "${env:RUNNER_TEMP}/obs.zip"
-          Invoke-WebRequest -Uri "https://github.com/obsproject/obs-studio/releases/download/${env:OBS_VERSION}/OBS-Studio-${env:OBS_VERSION}-Windows-x64.zip" -OutFile $ObsZip
+          if (-not (Test-Path $ObsZip)) {
+            Invoke-WebRequest -Uri "https://github.com/obsproject/obs-studio/releases/download/${env:OBS_VERSION}/OBS-Studio-${env:OBS_VERSION}-Windows-x64.zip" -OutFile $ObsZip
+          }
           Expand-Archive -Path $ObsZip -DestinationPath "${env:RUNNER_TEMP}/obs"
 
           $PluginZip = Get-ChildItem -Path "${env:RUNNER_TEMP}/artifacts" -Recurse -Filter '*-windows-x64.zip' | Select-Object -First 1
