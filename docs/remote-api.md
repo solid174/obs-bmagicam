@@ -98,7 +98,7 @@ Resets answer 202 and report progress as events until every value is confirmed (
 
 Advanced values: `smoothing`, `texture`, `evening`, `sharpen`, `glow`, `maskSoftness`, `detailSize` (0–100) and `showMask`. Setting one turns the style into `custom`, as in the dock.
 
-`{source}` is the OBS source UUID and `{filter}` the filter name, URL-encoded. The Stabilize filter, if built ([architecture.md](architecture.md#stabilization)), gets the same pair of endpoints under `/api/v1/stabilize`.
+`{source}` is the OBS source UUID and `{filter}` the filter name, URL-encoded.
 
 ## Events
 

@@ -96,7 +96,8 @@ Run on the release candidate packages, installed from the draft release on clean
 | Controls | Every row of the [control map](ui.md#control-map) changes the phone and the preview; changes on the phone appear in OBS (CTL-1 to CTL-3) | One, spot checks on the others |
 | Looks | LOOK-5 on a color chart and real skin, checked on waveform and vectorscope | One |
 | Resets | RST-1 to RST-4, including Wi-Fi pulled in the middle of a reset | One |
-| Beautify, Stabilize | BEA-1 to BEA-8, STB-1, GPU time within NFR-1 | Windows on Iris Xe, macOS on M1 |
+| Beautify | BEA-1 to BEA-8, GPU time within NFR-1 | Windows on Iris Xe, macOS on M1 |
+| Stabilization | Each of the four modes reaches the stream and matches the app's own picture (STB-1, STB-2) | One |
 | Simple mode | Someone who has never used the plugin installs it, connects a phone and gets a good picture with Simple mode and the tooltips only, without help (UI-4, UI-5) | One |
 | Remote Control | Panel in Safari on iPhone and Chrome on Android; API examples; password lockout; outside address refused | All three |
 | Themes | Dock, properties, wizard and dialog in every built-in theme; switch theme while they are open (UI-1) | All three |

@@ -38,7 +38,7 @@ All components ship in one plugin. Source and filter do not depend on each other
 - **CTL-5** Clicking the picture in the source's Interact window sets the focus point, like tapping the phone screen.
 - **CTL-6** One dock serves every phone in the scene collection; the user picks which phone it controls.
 - **CTL-7** Settings that only change the phone's own screen or its recordings, not the picture OBS receives, are marked as such.
-- **CTL-8** "Set up for streaming" prepares the camera the way a camera operator would for a live stream: a flicker-free shutter for the local mains frequency, exposure and white balance measured once and then held so they do not drift on stream, continuous autofocus and stabilization on. Every value stays adjustable afterwards.
+- **CTL-8** "Set up for streaming" prepares the camera the way a camera operator would for a live stream: a flicker-free shutter for the local mains frequency, exposure and white balance measured once and then held so they do not drift on stream, and continuous autofocus. Stabilization stays as the user set it, because only they know whether the phone is handheld. Every value stays adjustable afterwards.
 
 ## Looks
 
@@ -50,9 +50,9 @@ All components ship in one plugin. Source and filter do not depend on each other
 
 ## Stabilization
 
-- **STB-1** A stabilization setting steadies handheld and moving shots at least as well as the iPhone's own camera app.
-- **STB-2** Levels Off, Standard and Strong. Each says what it costs: stabilization crops the picture slightly and adds delay, Strong more than Standard. Off is the default, for a phone on a tripod.
-- **STB-3** The phone's own stabilization is used where the app offers it, because it works from the phone's gyroscope. What the phone cannot deliver, an OBS Stabilize filter does; like Beautify, it works on any video source.
+- **STB-1** The stabilization setting uses Blackmagic Camera's own video stabilization, which works from the phone's gyroscope before compression and steadies handheld and moving shots very well (tried on the test phone).
+- **STB-2** The modes are the app's: Off, Standard, Cinematic and Extreme. Each says what it is for and what it costs: stabilization crops the picture, more in the stronger modes. Off suits a phone on a tripod.
+- **STB-3** The plugin adds no stabilization of its own.
 
 ## Reset
 

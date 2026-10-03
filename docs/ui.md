@@ -21,7 +21,6 @@ How obs-bmagicam looks and behaves inside OBS. Requirements are in [requirements
 | Tools → **Add iPhone Camera…** | Setup wizard | ONE-1, SET-1, SET-2 |
 | Tools → **iPhone Camera Remote Control…** | Remote Control settings and connect info | WEB-5; mirrors Tools → WebSocket Server Settings |
 | Filters → **Beautify** | Style and the Beauty slider; advanced sliders and show mask behind "Advanced settings" | Any video source (BEA-1) |
-| Filters → **Stabilize** | Off, Standard, Strong | Only if the phone's own stabilization falls short (STB-3) |
 | A browser on a phone or tablet | Web panel | WEB-2 |
 
 ## Theme rules
@@ -79,7 +78,7 @@ The default. Everything a streamer needs, on one page, in everyday words:
 | Warmth | `wb.temperature`, `wb.auto` | Cool to warm, no Kelvin numbers |
 | Lens | `lens.camera` | Front, then one button per back lens, labelled the way the iPhone camera labels them (0.5×, 1×, 2×…) |
 | Focus | `focus.mode` (Continuous or One shot), `focus.refocus` | The tooltip mentions clicking the picture in Interact |
-| Stabilization | `lens.stabilization` | Off, Standard, Strong (STB-2) |
+| Stabilization | `lens.stabilization` | The app's modes: Off, Standard, Cinematic, Extreme (STB-2) |
 
 Zoom, the color sliders and everything else stay in Advanced. A status line appears under the rows only when something needs attention, for example "Phone battery at 15 %. Connect a charger." The stream details (format, bitrate, frame rate) are in Advanced and in the state tooltip.
 
@@ -162,7 +161,7 @@ Examples:
 | Brightness | Makes the picture brighter or darker. Turn Auto off to keep brightness steady while you stream. |
 | Warmth | Shifts colors cooler (blue) or warmer (orange) to match your lights. Auto sets it once from what the camera sees. |
 | Lens | Switches between the phone's cameras. Front faces you like a selfie; the back lenses give the best picture. |
-| Stabilization | Steadies shaky, handheld shots. It crops the picture a little and adds a short delay, so leave it Off on a tripod. |
+| Stabilization | Steadies handheld shots: Standard for small shakes, Cinematic for smooth moves, Extreme for walking. It crops the picture, more in the stronger modes, so leave it Off on a tripod. |
 | ISO (Advanced) | How sensitive the sensor is. Higher is brighter but grainier; keep it as low as your light allows. |
 | Shutter (Advanced) | How long each frame is exposed. Values marked ✓ avoid flicker from room lights; at 60 fps, 1/120 (1/100 where mains power is 50 Hz) looks most natural. |
 | Phone screen brightness (Advanced) | Brightness of the phone's own screen; the stream does not change. Lower keeps the phone cooler on long streams. |
@@ -206,7 +205,7 @@ Every setting the app offers over its API, with the ID used by the dock, the web
 | Lens | Camera | `lens.camera` | Choice, e.g. "Back 1× · 24 mm" | `/lens/cameras`, `/lens/cameras/active` | 7 lenses | yes |
 | Lens | Automatic lens switching | `lens.auto` | Switch | `/lens/cameras/auto` | hidden: not supported | yes |
 | Lens | Zoom | `lens.zoom` | Continuous, shows mm | `/lens/zoom` | 19–570 mm | yes |
-| Lens | Stabilization | `lens.stabilization` | Choice: Off, Standard, Strong (STB-2), or a switch, depending on V-15 | `/lens/opticalImageStabilization` | on | yes |
+| Lens | Stabilization | `lens.stabilization` | Choice: Off, Standard, Cinematic, Extreme (STB-2) | `/lens/opticalImageStabilization` (V-15) | on | yes |
 | Focus | Autofocus | `focus.mode` | Choice: Off, One shot, Continuous, Track face, Track object (as supported) | `/lens/focus/autoFocus` | One shot, Continuous | yes |
 | Focus | Focus | `focus.position` | Continuous, near to far | `/lens/focus` | 0–1 | yes, locked under continuous autofocus |
 | Focus | Refocus | `focus.refocus` | Action | `/lens/focus/autoFocus/retrigger` | — | yes |

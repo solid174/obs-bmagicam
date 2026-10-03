@@ -28,7 +28,6 @@ iPhone · Blackmagic Camera                      OBS · obs-bmagicam
 | --- | --- | --- |
 | iPhone Camera | Source: async video, audio, interaction (`OBS_SOURCE_ASYNC_VIDEO`, `OBS_SOURCE_AUDIO`, `OBS_SOURCE_INTERACTION`, `OBS_SOURCE_DO_NOT_DUPLICATE`) | `bmagicam_camera` |
 | Beautify | Video filter | `bmagicam_beautify` |
-| Stabilize, only if the phone's stabilization falls short ([Stabilization](#stabilization)) | Video filter | `bmagicam_stabilize` |
 | Camera Controls | Dock, `obs_frontend_add_dock_by_id` | `bmagicam_controls` |
 | Add iPhone Camera | Tools menu action opening a `QWizard`, `obs_frontend_add_tools_menu_qaction` | — |
 | Remote Control | Tools menu action opening a dialog | — |
@@ -46,7 +45,7 @@ src/
   stream/                StreamReceiver: SRT listener, demux, decode, timestamps
   source/                iPhone Camera obs_source_info and properties
   looks/                 built-in and user looks, Set up for streaming
-  filter/                Beautify (and Stabilize, if needed) obs_source_info
+  filter/                Beautify obs_source_info
   remote/                HTTP server, WebSocket events, auth, static panel
   ui/                    Camera Controls dock, wizard, Remote Control dialog, widgets
 data/
@@ -127,23 +126,27 @@ When a session connects:
 
 ### Receiver
 
-`StreamReceiver` runs one thread per source on FFmpeg:
+`StreamReceiver` (`stream/`) receives on FFmpeg, with two threads per connection:
 
-- **Input.** `srt://0.0.0.0:<port>?mode=listener&transtype=live&latency=<µs>` through libavformat, with an interrupt callback for shutdown. No `avformat_find_stream_info`: decoders are created from the stream types in the program map, and packets before the first keyframe are dropped. The first frame then follows the first keyframe, which the phone sends every second.
-- **Video.** HEVC or H.264 through libavcodec with hardware decoding (VideoToolbox on macOS, D3D11VA on Windows, VAAPI on Linux, software when none works). Frames are copied to system memory as NV12 and passed to `obs_source_output_video2` with BT.709 limited range. At 1080p60 that copy is about 190 MB/s.
-- **Audio.** AAC to float planar, 48 kHz stereo, passed to `obs_source_output_audio`.
-- **Timestamps.** One mapping for audio and video, with drift compensation; see [Audio and video sync](#audio-and-video-sync).
+- **Input.** `srt://0.0.0.0:<port>?mode=listener&transtype=live&latency=<µs>` through libavformat, with an interrupt callback for shutdown. No `avformat_find_stream_info`: decoders are created from the stream types in the program map. The first frame follows the first keyframe, which the phone sends every second.
+- **Video.** HEVC or H.264 through libavcodec with hardware decoding (VideoToolbox on macOS, D3D11VA on Windows, VAAPI or CUDA on Linux; software, with slice threads only, when none works). Video waits as compressed packets, about 1.5 MB per second at 12 Mb/s, and is decoded 30 ms before its presentation time, so only a few decoded frames are ever held, however late the audio runs. Frames are copied to system memory (NV12, or P010 for 10-bit) and passed to `obs_source_output_video2` at their presentation time with their color space, range and transfer (SDR, HLG or PQ). At 1080p60 that copy is about 190 MB/s. A frame more than 50 ms overdue is skipped rather than shown late.
+- **Audio.** AAC to float planar, 48 kHz stereo, passed to `obs_source_output_audio` as soon as it is decoded.
+- **Timestamps.** One mapping for audio and video; see [Audio and video sync](#audio-and-video-sync).
 - **Reconnect.** End of stream or an error closes the input and listens again immediately. The session meanwhile checks that the phone is still streaming and restarts it if not.
+- **Check at load.** FFmpeg must have the majors the plugin was built against and receive SRT ([FFmpeg ABI](#ffmpeg-abi)); otherwise the source does not start its receiver.
 - **Stats.** Frames per second, bitrate, late and dropped frames, decode errors, and the phone's reported send-buffer use. Shown in the Advanced status line, in the state tooltip and in the API; Simple mode only raises them when something is wrong.
 
 ### Audio and video sync
 
-NFR-6 puts sync before latency. The phone stamps audio and video with one clock (the MPEG-TS presentation timestamps), and the receiver keeps that relation intact:
+NFR-6 puts sync before latency. The phone stamps audio and video with one clock (the MPEG-TS presentation timestamps), and the receiver keeps that relation intact. OBS uses audio timestamps that lie within two seconds of its own clock as they are, so both streams go to OBS on OBS's clock:
 
-- **One mapping.** Stream time is mapped to OBS time by a single offset that audio and video share. Video frames go to OBS with their timestamps behind a jitter buffer of two frames (33 ms at 60 fps), and OBS presents them in step with the audio. The source does not use OBS's unbuffered mode: that shows each frame the moment it arrives, ahead of the audio, which OBS plays through its audio buffer.
-- **Clock drift.** The phone's and the PC's clocks run at slightly different rates, typically tens of ppm, which adds up to a tenth of a second or more per hour. The receiver measures the drift from packet arrival times with a slow control loop and adjusts the mapping. Audio is resampled by the same tiny ratio (libswresample's drift compensation), so OBS never has to drop or insert audio to catch up. Video timestamps follow the same mapping.
+- **One mapping** (`MediaClock`). A timestamp maps to itself plus the transport delay plus a 50 ms buffer, for audio and video alike. The transport delay is the greatest delay of any packet relative to its timestamp, over both streams, so the stream that arrives later, and the last packet of a burst, are still on time.
+- **Settling.** Right after the phone connects, nothing is presented. The delay is measured once both streams are there and the burst of packets that follows the connection (200 ms) is over, for 300 ms, or for one second for a stream without audio. The first frame is then already on the final timeline.
+- **Following.** Afterwards the delay follows the greatest delay per one-second window with a 30-second time constant, by at most 3 ms per window, which absorbs the drift between the phone's and the computer's clocks (tens of ppm). A packet that would arrive less than 10 ms before its presentation moves the map later at once; an excess of more than 100 ms that lasts three windows is dropped at once.
+- **Gapless audio.** Audio goes to OBS without gaps. It follows the mapping by stretching or squeezing by at most 0.5 % (libswresample's compensation), so OBS never has to drop or insert audio; only a difference of more than 20 ms is closed with a jump.
+- **Video on time.** Each frame goes to OBS at its presentation time, so OBS shows it in step with the audio.
 - **Reconnect.** A new stream gets a new mapping before its first frame is shown, so a broken stream's timing never carries over.
-- **Measured, not assumed.** V-16 measures the offset with a clap test, one sharp event that is both seen and heard, in a recording at the start and after two hours.
+- **Measured, not assumed.** A loopback test plays a 1080p60 HEVC + AAC stream with a white flash and a beep at the same timestamp every second into the receiver over SRT. Over 110 seconds, the beep reached OBS's timeline within 1.1 ms of its flash, with the sender's clock exact or off by ±300 ppm, no frame late after startup and no gap in the audio. V-16 still measures the phone with a clap test, one sharp event that is both seen and heard, in a recording at the start and after two hours.
 
 ### FFmpeg ABI
 
@@ -164,12 +167,12 @@ Measured on the test phone ([camera-api.md](camera-api.md#latency)):
 | Stage | Time |
 | --- | --- |
 | Sound or light reaches the phone → packet arrives at the PC (1080p60, audio path; includes the 50–120 ms SRT buffer and the test's speaker delay) | about 350 ms |
-| Jitter buffer for sync (two frames at 60 fps) | 33 ms |
-| Decode and hand over to OBS (estimate) | 10–20 ms |
+| Buffer after the latest packet, which also covers decoding ([Audio and video sync](#audio-and-video-sync)) | 50 ms |
+| Lag of the later stream in the phone's muxing, if any (V-18) | unknown |
 | OBS render and display (one or two frames at 60 fps) | 17–33 ms |
 | For comparison: the same through OBS's Media Source instead of the plugin's receiver | about 1240 ms |
 
-That is about 400 ms end to end at 1080p60, the NFR-2 target, with little margin. The speaker delay inside the 350 ms is unknown, so V-1 measures video glass to glass, and V-2 and V-11 look for savings on the phone side. 4K adds about 180 ms (measured).
+That is about 420 ms end to end at 1080p60, a little over the NFR-2 target. The speaker delay inside the 350 ms is unknown, so V-1 measures video glass to glass, and V-2 and V-11 look for savings on the phone side. 4K adds about 180 ms (measured).
 
 ## Looks
 
@@ -198,7 +201,7 @@ The phone offers only global saturation and hue, not saturation by hue, so the l
 1. Shutter: the value from `/video/flickerFreeShutters` closest to 1/(2 × frame rate). At 60 fps that is 1/100 under 50 Hz mains and 1/120 under 60 Hz. The phone's list already reflects the local mains frequency.
 2. Exposure: auto exposure `OneShot` with the shutter fixed, wait until ISO settles, then `Off`, so brightness holds while streaming (V-13).
 3. White balance: `PUT /video/whiteBalance/doAuto` once; it stays put afterwards.
-4. Focus: continuous autofocus; face tracking where the phone offers it. Stabilization on.
+4. Focus: continuous autofocus; face tracking where the phone offers it. Stabilization stays as the user set it (CTL-8).
 5. Dynamic range `Video` (Rec.709), the range the looks are designed for. `Film` and `Extended Video` are for grading recordings, and `HLG` is HDR.
 6. Optional: dim the phone's screen to 30 % to keep it cool during long streams.
 
@@ -250,17 +253,7 @@ Tests, after the reference's self-test idea: neutral settings are a bit-exact id
 
 ## Stabilization
 
-Two layers, used in this order (STB-3):
-
-1. **On the phone.** The phone stabilizes from its gyroscope before encoding, like the stock Camera app. The API offers one control for it: `/lens/opticalImageStabilization` with `enabled`, plus `controlAvailable`, which says whether it can be changed in the current format. V-15 establishes whether this switch drives the app's video stabilization, which strengths the app has, and whether it reaches the livestream. If it covers Standard and Strong, the setting maps straight onto it.
-2. **In OBS, only if the phone falls short.** A Stabilize filter (`bmagicam_stabilize`) on the GPU:
-   - estimates global motion between frames on a downscaled luma pyramid;
-   - smooths the camera path: causal for Standard, with no added delay; with a look-ahead of a few frames for Strong, which adds that many frames of delay;
-   - shifts and rotates each frame along the smoothed path, inside a small crop that hides the borders.
-
-   Rolling-shutter wobble needs the gyroscope and stays the phone's job. Off skips the filter entirely (PWR-1). Like Beautify, the filter works on any video source.
-
-The decision whether the filter is needed falls after V-15 in M1. If it is, the filter is built in M3 together with Beautify.
+The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera offers four modes: Off, Standard, Cinematic and Extreme (STB-2). They steady handheld shots very well, so the plugin adds no stabilization of its own (STB-3). The setting maps onto the app's mode; the API offers `/lens/opticalImageStabilization` with `enabled` and `controlAvailable` (whether it can be changed in the current format), and V-15 establishes how the four modes are set through it, how much each crops and whether a mode adds delay to the livestream.
 
 ## Remote Control server
 
@@ -342,9 +335,10 @@ To settle in development, in the milestone named:
 | V-12 | macOS Local Network permission for OBS: OBS 32.2.2 has no `NSLocalNetworkUsageDescription`. Does the prompt appear, and do Bonjour and outgoing connections work from inside OBS? | M1 |
 | V-13 | Which parameters auto exposure drives (`type`), and whether face-tracking autofocus exists on the back cameras | M2 |
 | V-14 | What happens to a running stream when the app goes to the background | M1 |
-| V-15 | Stabilization: does `/lens/opticalImageStabilization` drive the app's video stabilization, which strengths can be reached, does it apply to the livestream, and what delay does each add? | M1 |
+| V-15 | Stabilization: how the API sets the app's modes Off, Standard, Cinematic and Extreme (`/lens/opticalImageStabilization` has only `enabled`), how much each crops, and whether a mode adds delay to the livestream | M1 |
 | V-16 | Lip sync: offset between sound and picture in a recording, at the start and after two hours, against NFR-6 | M1 |
 | V-17 | Does the app's Remote Password (Settings → Remote Camera Control) protect the HTTP API, and how is it sent? | M1 |
+| V-18 | How far apart audio and video arrive relative to their timestamps in the phone's stream; the later one sets the delay | M1 |
 
 ## Decided after measurement
 
@@ -362,8 +356,8 @@ Each milestone leaves a working plugin on all three platforms.
 | Milestone | Delivers | Done when |
 | --- | --- | --- |
 | M0 Skeleton | Plugin from obs-plugintemplate; empty source, filter, dock and Tools entries; locale files; CI builds and packages for Windows, macOS and Linux | The packages install and load in OBS on all three |
-| M1 Camera | Discovery, CameraClient, stream setup, receiver with hardware decoding, session states, reconnect, stop when hidden, minimal wizard | 1080p60 for 30 min without drops on all three; lip sync within NFR-6 at the start and after two hours; V-1 to V-4, V-7, V-8, V-11, V-12 and V-14 to V-17 answered |
+| M1 Camera | Discovery, CameraClient, stream setup, receiver with hardware decoding, session states, reconnect, stop when hidden, minimal wizard | 1080p60 for 30 min without drops on all three; lip sync within NFR-6 at the start and after two hours; V-1 to V-4, V-7, V-8, V-11, V-12 and V-14 to V-18 answered |
 | M2 Controls | Control descriptors with tooltips, the dock in Simple and Advanced modes, two-way sync, locks, tap-to-focus, Set up for streaming, looks, resets, phone stabilization | Every control in [ui.md](ui.md#control-map) works on the test phone; UI-4 and UI-5 hold; looks tuned until LOOK-5 holds |
-| M3 Filters | Beautify with styles, the Beauty slider, advanced sliders and show mask; the Stabilize filter if V-15 calls for it | BEA-1 to BEA-8, STB-1 and NFR-1 met on the listed hardware |
+| M3 Beautify | Beautify with styles, the Beauty slider, advanced sliders and show mask | BEA-1 to BEA-8 and NFR-1 met on the listed hardware |
 | M4 Remote Control | Server, API, web panel, Tools dialog | WEB-1 to WEB-5; the panel controls everything the dock does |
 | M5 Release | Full wizard with screenshots, Russian, theme pass, signing and notarization, documentation | The release checklist in [releasing.md](releasing.md) passes |
