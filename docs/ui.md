@@ -49,7 +49,7 @@ How obs-bmagicam looks and behaves inside OBS. Requirements are in [requirements
 
 ## Controls
 
-The dock's own controls, modelled on Blackmagic Camera's:
+The dock's own controls, modelled on Blackmagic Camera's (reviewed from a screen recording of app 3.5):
 
 | Control | Looks like | Used for |
 | --- | --- | --- |
@@ -59,6 +59,21 @@ The dock's own controls, modelled on Blackmagic Camera's:
 | Segmented control | Joined buttons, one selected | Stabilization (Off, Standard, Cinematic, Extreme), focus mode, auto exposure |
 | Chip | A small rounded toggle | Auto on Brightness and Warmth, Auto focus |
 | Histogram | Luma and RGB histogram of the received picture, like the app's | Advanced: judging exposure. Computed from every fourth decoded frame at low resolution |
+| Quick values | A row of small buttons under a ruler for the values used most | White balance presets (tungsten 3200 K, fluorescent 4000 K, daylight 5600 K, cloudy 6500 K, shade 7500 K), the flicker-free shutters |
+| Icon row | Toggle buttons with the camera's symbols | The phone screen's tools: zebra, focus assist, false color, frame guides, grids |
+
+As in the app, the adjuster of the selected tile opens in one place below the strip and replaces the previous one:
+
+| Tile | Adjuster |
+| --- | --- |
+| Lens | Lens buttons, the zoom ruler with its 1×, 2×… marks, and ↺ back to 1× |
+| Shutter | Ruler over the supported shutters, flicker-free ones marked ✓ and offered as quick values; Auto |
+| ISO | Ruler over the supported ISOs; Auto |
+| WB, Tint | Temperature and tint rulers, white balance presets as quick values, and Auto, which measures once |
+| FPS | The video format's frame rates, from the phone's list (it also changes the stream, CTL-7) |
+| Iris | Shown read-only when the lens has a fixed aperture, as on iPhone |
+
+The ruler is the app's: a fixed center needle in the highlight color, the scale sliding under it while dragged, major ticks labelled, the value in a box above the needle, and Auto as a button at its right end, filled while it is on. The tile above shows the value while it changes.
 
 ## Camera Controls dock
 
