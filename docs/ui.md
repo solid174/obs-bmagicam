@@ -4,12 +4,13 @@ How obs-bmagicam looks and behaves inside OBS. Requirements are in [requirements
 
 ## Principles
 
-1. **Part of OBS.** Only standard Qt widgets, styled by the current OBS theme. No colors, fonts or style sheets of our own (UI-1, UI-2).
+1. **Part of OBS.** Every color and font comes from the current OBS theme (UI-1, UI-2): standard Qt widgets where they fit, and controls of our own that draw only with the theme's palette and font.
 2. **Live.** A slider changes the camera while it moves, and the OBS preview shows the result (CTL-2). Changes made on the phone show up in OBS within half a second (CTL-3).
 3. **Honest.** A control appears only if the connected phone supports it (CTL-1). A locked control says why (CTL-4). Settings that only affect the phone's own screen or recordings are marked (CTL-7).
 4. **The same everywhere.** The dock, the web panel and the API are built from one list of controls, the [control map](#control-map).
 5. **Simple first.** Simple mode puts the essentials on one page in everyday words; Advanced shows everything (UI-4). A streamer who never opens Advanced still gets a professional picture, and never sees a word like ISO or Kelvin.
 6. **Self-explaining.** Every control has a tooltip in plain words: what it does, what it changes in the picture, when to use it (UI-5). See [Tooltips](#tooltips).
+7. **Visual and direct** (UI-6), in the spirit of Blackmagic Camera itself: values large enough to read at a glance, rulers to drag, tiles and buttons to click, short animations that show what changed. No walls of labels and text boxes; a text box appears only where something has to be typed.
 
 ## Where things are
 
@@ -25,9 +26,10 @@ How obs-bmagicam looks and behaves inside OBS. Requirements are in [requirements
 
 ## Theme rules
 
-- Widgets: `QLabel`, `QSlider`, `QSpinBox`, `QDoubleSpinBox`, `QComboBox`, `QCheckBox`, `QPushButton`, `QToolButton`, `QGroupBox`, `QTabWidget`, `QScrollArea`, laid out with `QFormLayout`. OBS's themes style all of them.
-- Never call `setStyleSheet`, never set a color, font or palette.
-- Text roles and icons come from OBS's theme classes, set with `widget->setProperty("class", "…")`. All of these exist in OBS 32.2.2's `Yami.obt` and `System.obt`, except `text-muted`, which only Yami-based themes define; in System such text simply shows as normal text.
+- Standard widgets where they fit: `QComboBox`, `QPushButton`, `QToolButton`, `QCheckBox`, `QTabWidget`, `QScrollArea`, menus and dialogs. OBS's themes style them.
+- The [controls of our own](#controls) are widgets painted with `QPainter` from the palette and the widget's font only: `Button` for tiles and segments, `Highlight` and `HighlightedText` for the selected one, `Text` and `ButtonText` for values, `PlaceholderText` for labels and ticks, `Mid` for lines, `Window` and `Base` behind. Sizes are multiples of the font's height, so they scale with the theme, the font size and high-DPI screens.
+- Never call `setStyleSheet`, never set a color, a font family or a palette.
+- Text roles and icons of standard widgets come from OBS's theme classes, set with `widget->setProperty("class", "…")`. All of these exist in OBS 32.2.2's `Yami.obt` and `System.obt`, except `text-muted`, which only Yami-based themes define; in System such text simply shows as normal text.
 
   | Class | Used for |
   | --- | --- |
@@ -39,10 +41,24 @@ How obs-bmagicam looks and behaves inside OBS. Requirements are in [requirements
   | `icon-refresh` | Search for phones again |
   | `icon-plus`, `icon-trash` | Save and delete a user look |
 
-- Icons come from the theme so they always match it. One exception: no OBS theme has a magic wand, so Beauty's icon ships as a single monochrome SVG, recolored at runtime with the palette's button text color. The only other images are the phone screenshots in the wizard.
-- Sizes come from the theme and Qt. The dock has a minimum width of 280 px and no fixed heights. Russian text is about a third longer than English; labels wrap rather than cut off.
-- On `OBS_FRONTEND_EVENT_THEME_CHANGED` the dock re-polishes widgets whose state classes changed. Everything else follows the theme automatically.
-- Sliders and spin boxes ignore the mouse wheel unless they have focus, so scrolling through the dock never changes a setting (UI-3), the same as OBS's own properties.
+- Icons come from the theme where it has them. The camera's own symbols, which no OBS theme has (magic wand, lenses, stabilization modes, focus and exposure modes), ship as monochrome SVGs and are recolored at runtime with the palette's button text color. The only other images are the phone screenshots in the wizard.
+- Animations are short (150 ms, ease-out, `QVariantAnimation`): a selection highlight slides to the new segment, a value rolls to its new number, an adjuster opens below its tile. Nothing animates while the user drags: the control follows the pointer at once (CTL-2).
+- The dock has a minimum width of 280 px and no fixed heights. Russian text is about a third longer than English; labels wrap rather than cut off.
+- On `OBS_FRONTEND_EVENT_THEME_CHANGED` the dock re-polishes widgets whose state classes changed and repaints its own controls with the new palette.
+- Rulers and sliders ignore the mouse wheel unless they have focus, so scrolling through the dock never changes a setting (UI-3), the same as OBS's own properties.
+
+## Controls
+
+The dock's own controls, modelled on Blackmagic Camera's:
+
+| Control | Looks like | Used for |
+| --- | --- | --- |
+| Ruler | A horizontal scale with ticks and labels under a fixed center mark, the value in a small box above it. Drag the scale, or scroll when focused; it snaps to the values the phone supports and marks special ones (✓ for flicker-free shutters). Double-click to type an exact value | Zoom, ISO, shutter, white balance, tint, focus, color values; Brightness, Warmth and Beauty in Simple mode |
+| Parameter tile | A small label over a large value, an "A" badge while the camera sets it automatically; the selected tile is filled with the highlight color. Selecting a tile opens its ruler below the strip | Advanced: Lens, FPS, Shutter, Iris, ISO, WB and Tint, the strip the app shows |
+| Button row | Buttons with an icon and a caption, one selected | Lens (Front, 0.5×, 1×, 2×, 4×, 8×), Look |
+| Segmented control | Joined buttons, one selected | Stabilization (Off, Standard, Cinematic, Extreme), focus mode, auto exposure |
+| Chip | A small rounded toggle | Auto on Brightness and Warmth, Auto focus |
+| Histogram | Luma and RGB histogram of the received picture, like the app's | Advanced: judging exposure. Computed from every fourth decoded frame at low resolution |
 
 ## Camera Controls dock
 
@@ -52,20 +68,25 @@ Without an iPhone Camera source in the scene collection, the dock shows one line
 
 ### Simple mode
 
-The default. Everything a streamer needs, on one page, in everyday words:
+The default. Everything a streamer needs, on one page, in everyday words. Selected items are filled with the theme's highlight color; here they are in brackets:
 
 ```
 ┌ Camera Controls ─────────────────────────────────────────────────┐
 │ [iPhone 17 Pro (A) · Main Camera   ▾]  ● Live  ☐ Advanced [⋮]    │
 │                                                                  │
-│                  [ Set up for streaming ]                        │
-│ Look           [Studio                              ▾]           │
-│ ✦ Beauty       [Natural ▾]  ━━━━━━━━●━━━━━━━━━━━━━━   55         │
-│ Brightness     ━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━━   ☐ Auto          │
-│ Warmth         ━━━━━━━●━━━━━━━━━━━━━━━━━━━━━━━   [Auto]          │
-│ Lens           [Front] [0.5×] [1×] [2×] [4×] [8×]                │
-│ Focus          ☑ Auto   [Refocus]                                │
-│ Stabilization  [Off                                 ▾]           │
+│            ╭──────────────────────────────────────╮              │
+│            │         Set up for streaming         │              │
+│            ╰──────────────────────────────────────╯              │
+│ Look        Natural [Studio] Warm  Vivid  Soft  Cinematic        │
+│ ✦ Beauty    Natural ▾                                55          │
+│             ┆ · · · ┆ · · · ┆ · · ┃ ┆ · · · ┆ · · · ┆            │
+│ Brightness                                        (Auto)         │
+│             ┆ · · · ┆ · · ·┃┆ · · · ┆ · · · ┆ · · · ┆            │
+│ Warmth      cool                          warm    (Auto)         │
+│             ┆ · · · ┆ · · · ┆ ·┃· · ┆ · · · ┆ · · · ┆            │
+│ Lens        [Front]  0.5×   1×   2×   4×   8×                    │
+│ Focus       (Auto)  [Refocus]                                    │
+│ Stabilize   [Off]  Standard  Cinematic  Extreme                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -84,26 +105,26 @@ Zoom, the color sliders and everything else stay in Advanced. A status line appe
 
 ### Advanced mode
 
-Every control in the [control map](#control-map), in tabs:
+Every control in the [control map](#control-map). The top is the app's own layout: a histogram, the strip of parameter tiles, and below it the adjuster of the selected tile, here Lens with its lens buttons and the zoom ruler. The other groups follow in tabs:
 
 ```
 ┌ Camera Controls ─────────────────────────────────────────────────┐
 │ [iPhone 17 Pro (A) · Main Camera   ▾]  ● Live  ☑ Advanced [⋮]    │
-│ Look  [Studio                           ▾]   [+]  [-]            │
-│ ┌ Image │ Color │ Lens │ Beauty │ Phone ─────────────────────┐   │
-│ │ ┌ Exposure ─────────────────────────────────────── [↺] ┐   │   │
-│ │ │ Auto exposure   [Off                          ▾]     │   │   │
-│ │ │ ISO             ━━━━━━●━━━━━━━━━━━━━━━   ISO 400     │   │   │
-│ │ │ Shutter         ━━━━●━━━━━━━━━━━━━━━━━   1/100 ✓     │   │   │
-│ │ └──────────────────────────────────────────────────────┘   │   │
-│ │ ┌ White balance ────────────────────────────────── [↺] ┐   │   │
-│ │ │ Temperature     ━━━━━━━●━━━━━━━━━━━━━━    4500 K     │   │   │
-│ │ │ Tint            ━━━━━━━━━━●━━━━━━━━━━━       +15     │   │   │
-│ │ │                                        [Auto WB]     │   │   │
-│ │ └──────────────────────────────────────────────────────┘   │   │
-│ │                                     [Set up for streaming] │   │
+│ ┌ Rec.709 ───────────────────┐  Look  [Studio        ▾] [+] [−]  │
+│ │ ▁▁▂▃▅▆▅▃▂▁▁▁▂▃▄▃▂▁▁▁▂▃▂▁▁  │  1080p60 · 12.1 Mb/s · 60 fps     │
+│ └────────────────────────────┘  Battery 50 %                     │
+│ [LENS ]  FPS   SHUTTER A  IRIS   ISO A  WB      TINT             │
+│ [24 mm]  60    1/100      f/1.8  400    4500 K  +15              │
+│                                                                  │
+│ [Front]  0.5×  [1×]  2×   4×   8×                                │
+│                       ┌──────┐                                   │
+│                       │  1×  │                                   │
+│   ┆ · · · ┆ · · · ┆ · · · ┃ · · · ┆ · · · ┆ · ·  1.5×  2×  [↺]   │
+│ ┌ Color │ Focus │ Audio │ Phone ─────────────────────────────┐   │
+│ │ Saturation  ┆ · · · ┆ · · · ┆ ┃ · · ┆ · · · ┆     1.12  │      │
+│ │ Contrast    ┆ · · · ┆ · · · ┆ · ┃ · ┆ · · · ┆     1.08  │      │
+│ │ Show wheels ▸                                              │   │
 │ └────────────────────────────────────────────────────────────┘   │
-│ 1080p60 · HEVC · 12.1 Mb/s · 60 fps · Battery 50 %               │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -130,10 +151,10 @@ These are the same in both modes:
 
 | Kind | Widget | Behavior |
 | --- | --- | --- |
-| Continuous value (temperature, tint, focus, zoom, color) | Slider plus spin box, like OBS's slider properties | Sends while dragging, coalesced ([architecture.md](architecture.md#control-path)) |
-| Discrete list (ISO, shutter) | Slider over the phone's supported values, with a value label | Snaps to the supported values. Flicker-free shutter values carry a ✓ and a tooltip |
-| Choice | Combo box | Applies on selection |
-| Switch | Check box | Applies on toggle |
+| Continuous value (temperature, tint, focus, zoom, color) | Ruler with the value above it | Sends while dragging, coalesced ([architecture.md](architecture.md#control-path)) |
+| Discrete list (ISO, shutter) | Ruler over the phone's supported values | Snaps to the supported values. Flicker-free shutter values carry a ✓ and a tooltip |
+| Choice | Segmented control or button row up to six options, combo box beyond | Applies on selection |
+| Switch | Chip | Applies on toggle |
 | Action | Button | Disabled while the action runs |
 | Read-only | Label, `text-muted` | Updates from the phone |
 
@@ -338,7 +359,7 @@ Laid out like Tools → WebSocket Server Settings (WEB-5):
 ## Web panel
 
 - One page served by OBS. It works on a phone held upright and on a tablet, with touch-sized sliders.
-- Simple and Advanced like the dock (UI-4). Simple is the default and shows the same eight rows; Advanced adds the tabs. Everything is rendered from `GET /api/v1/controls`, so the panel always matches the dock. Updates arrive over the WebSocket (WEB-2).
+- Simple and Advanced like the dock (UI-4). Simple is the default and shows the same eight rows; Advanced adds the tiles and the tabs. It uses the same kinds of controls as the dock (rulers, tiles, button rows, segmented controls), sized for touch (UI-6). Everything is rendered from `GET /api/v1/controls`, so the panel always matches the dock. Updates arrive over the WebSocket (WEB-2).
 - Every control has an ⓘ button that opens its help text (UI-5).
 - Colors follow the current OBS theme: the server passes the Qt palette at `/api/v1/theme`, and the panel maps it to CSS variables. Text uses the device's system font.
 - Language follows OBS's language and uses the same translations as the dock.

@@ -357,7 +357,7 @@ Each milestone leaves a working plugin on all three platforms.
 | --- | --- | --- |
 | M0 Skeleton | Plugin from obs-plugintemplate; empty source, filter, dock and Tools entries; locale files; CI builds and packages for Windows, macOS and Linux | The packages install and load in OBS on all three |
 | M1 Camera | Discovery, CameraClient, stream setup, receiver with hardware decoding, session states, reconnect, stop when hidden, minimal wizard | 1080p60 for 30 min without drops on all three; lip sync within NFR-6 at the start and after two hours; V-1 to V-4, V-7, V-8, V-11, V-12 and V-14 to V-18 answered |
-| M2 Controls | Control descriptors with tooltips, the dock in Simple and Advanced modes, two-way sync, locks, tap-to-focus, Set up for streaming, looks, resets, phone stabilization | Every control in [ui.md](ui.md#control-map) works on the test phone; UI-4 and UI-5 hold; looks tuned until LOOK-5 holds |
+| M2 Controls | Control descriptors with tooltips, the dock in Simple and Advanced modes, two-way sync, locks, tap-to-focus, Set up for streaming, looks, resets, phone stabilization | Every control in [ui.md](ui.md#control-map) works on the test phone; UI-4, UI-5 and UI-6 hold; looks tuned until LOOK-5 holds |
 | M3 Beautify | Beautify with styles, the Beauty slider, advanced sliders and show mask | BEA-1 to BEA-8 and NFR-1 met on the listed hardware |
 | M4 Remote Control | Server, API, web panel, Tools dialog | WEB-1 to WEB-5; the panel controls everything the dock does |
 | M5 Release | Full wizard with screenshots, Russian, theme pass, signing and notarization, documentation | The release checklist in [releasing.md](releasing.md) passes |

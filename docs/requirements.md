@@ -94,10 +94,11 @@ All components ship in one plugin. Source and filter do not depend on each other
 ## Look and feel
 
 - **UI-1** Looks like part of OBS in every built-in theme (Default, Classic, Acri, Grey, Light, Rachni and System) and follows a theme change without a restart.
-- **UI-2** Uses OBS's own building blocks: a dock, source properties, Tools menu entries and a wizard. No custom colors, fonts or window styles.
+- **UI-2** Uses OBS's own building blocks: a dock, source properties, Tools menu entries and a wizard. No colors, fonts or window styles of its own: controls the plugin draws itself take every color and its font from the current theme.
 - **UI-3** Scrolling through the dock never changes a setting. Sliders respond to the mouse wheel only when focused, as in OBS's own properties.
 - **UI-4** Simple and Advanced modes. Simple, the default, is never crowded: eight rows on one page (Set up for streaming, look, Beauty, brightness, warmth, lens, focus, stabilization) in everyday words instead of camera terms, and a status line only when something needs attention. Advanced shows every control. The dock, the web panel and the Beautify properties all have both modes.
 - **UI-5** Every control explains itself: a tooltip says in plain words what it does, what it changes in the picture and when to use it. In the web panel the same text opens with an ⓘ button, because touch screens have no hover.
+- **UI-6** Controls are visual and direct, in the spirit of Blackmagic Camera: values large enough to read at a glance, changed by dragging rulers and clicking tiles and buttons rather than by typing, with short animations that show what changed. A text box appears only where something has to be typed.
 
 ## Hardware and power
 
