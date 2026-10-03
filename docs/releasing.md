@@ -7,7 +7,7 @@ Every release ships for Windows, macOS and Linux at once (NFR-3). The build come
 | Platform | Toolchain | CI runner | Package |
 | --- | --- | --- | --- |
 | Windows 10 and 11, x64 | Visual Studio 2022, CMake 3.30 | `windows-2022` | `.exe` installer and `.zip` |
-| macOS 13 or newer, universal (Apple Silicon and Intel) | Xcode 16, CMake 3.30 | `macos-15` | `.pkg`, signed and notarized |
+| macOS 12 or newer, universal (Apple Silicon and Intel) | Xcode 16, CMake 3.30 | `macos-15` | `.pkg`, signed and notarized |
 | Ubuntu 24.04, x86_64 | GCC 13, Ninja, CMake 3.28 | `ubuntu-24.04` | `.deb` |
 
 The Windows installer is the one addition to the template's packaging: a small Inno Setup script, built in CI, that finds OBS and installs into `C:\ProgramData\obs-studio\plugins\obs-bmagicam`. The `.zip` holds the same files for installing by hand. Inno Setup is preinstalled on GitHub's Windows runners.
@@ -22,17 +22,19 @@ Linux packages target OBS from the official PPA or the distribution. OBS from Fl
 | --- | --- | --- |
 | obs-studio sources (headers) | 32.2.0 | The oldest supported OBS. Building against it keeps the plugin loadable on every later 32.x and 33.x |
 | obs-deps prebuilt | 2026-07-15 | What OBS 32.2 ships: FFmpeg 8.1.2, Mbed TLS, nlohmann/json, qrcodegen |
-| obs-deps Qt 6 | 2026-07-15 | The Qt that OBS 32.2 ships |
+| obs-deps Qt 6 | 2026-07-15 | The Qt that OBS 32.2 ships (6.11) |
 
 cpp-httplib is fetched with CMake `FetchContent` from a release URL with a SHA-256 hash, so a build never picks up an unreviewed version.
 
 On Ubuntu the same libraries come from the distribution: `obs-studio` (PPA), `libavcodec-dev`, `libavformat-dev`, `libavutil-dev`, `libmbedtls-dev`, `nlohmann-json3-dev`, `libqrcodegencpp-dev`, `libavahi-client-dev` and `qt6-base-dev`. CI checks that the distribution's FFmpeg has SRT built in: `ffprobe -protocols | grep -qx '  srt'`.
 
-When OBS moves to a new FFmpeg major ([architecture.md](architecture.md#ffmpeg-abi)), the pins move with it in a new plugin release. The runtime check keeps a mismatched combination from crashing OBS.
+On Ubuntu the plugin builds against OBS from the PPA and the distribution's libraries, the same ones that OBS uses there: FFmpeg 6.1, Mbed TLS 2.28 and Qt 6.4. The code therefore sticks to APIs that exist in both those versions and the obs-deps ones.
+
+When OBS moves to a new FFmpeg major ([architecture.md](architecture.md#ffmpeg-abi)), the pins move with it in a new plugin release. Until then, OBS reports the plugin in its "Plugin Load Error" message instead of loading it.
 
 ## Building locally
 
-Presets come from the template:
+Presets come from the template. macOS needs Xcode 16 or newer; the Command Line Tools alone are not enough, because the template builds with the Xcode generator.
 
 ```sh
 cmake --preset macos         && cmake --build --preset macos

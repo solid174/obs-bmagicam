@@ -49,6 +49,8 @@ How obs-bmagicam looks and behaves inside OBS. Requirements are in [requirements
 
 Two modes (UI-4). The Advanced check box in the header switches between them, and the choice is remembered.
 
+Without an iPhone Camera source in the scene collection, the dock shows one line instead: "Add an iPhone with Tools → Add iPhone Camera..., then adjust its camera here."
+
 ### Simple mode
 
 The default. Everything a streamer needs, on one page, in everyday words:

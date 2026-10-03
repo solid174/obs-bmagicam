@@ -4,7 +4,7 @@ From nothing to your iPhone live in OBS. You do the phone part once; after that,
 
 ## What you need
 
-- OBS Studio 32.2 or newer on Windows 10 or 11 (x64), macOS 13 or newer on Apple Silicon, or Ubuntu 24.04 (x64).
+- OBS Studio 32.2 or newer on Windows 10 or 11 (x64), macOS 12 or newer (Apple Silicon or Intel), or Ubuntu 24.04 (x64).
 - An iPhone with **Blackmagic Camera 3.4 or newer** (free on the App Store). Remote control arrived in 3.4.
 - The iPhone and the computer on the same network. 5 GHz Wi-Fi works best. Guest networks usually block devices from seeing each other. Connecting the computer to the iPhone's Personal Hotspot also works.
 

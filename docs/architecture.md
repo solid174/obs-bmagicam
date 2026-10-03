@@ -39,7 +39,7 @@ The iPhone Camera source outputs timestamped video frames and audio, so OBS keep
 
 ```
 src/
-  plugin-main.cpp        module load and unload, registration, FFmpeg ABI check
+  plugin-main.cpp        module load and unload, registration
   discovery/             DNS-SD browsing: dnssd-macos.cpp, dnssd-windows.cpp, dnssd-avahi.cpp
   phone/                 CameraClient: REST and WebSocket, write coalescing, retries
   camera/                CameraSession, CameraState, control descriptors, snapshots
@@ -147,7 +147,7 @@ NFR-6 puts sync before latency. The phone stamps audio and video with one clock 
 
 ### FFmpeg ABI
 
-The plugin uses the FFmpeg that OBS ships: obs-deps on Windows and macOS, the distribution's FFmpeg on Linux. FFmpeg libraries change their binary interface with each major version, and OBS changed majors in the middle of the 32 series:
+The plugin uses the FFmpeg that OBS ships: obs-deps on Windows and macOS, the distribution's FFmpeg on Linux (6.1, libavcodec 60, on Ubuntu 24.04). FFmpeg libraries change their binary interface with each major version, and OBS changed majors in the middle of the 32 series:
 
 | OBS | obs-deps | FFmpeg | libavcodec |
 | --- | --- | --- | --- |
@@ -155,7 +155,7 @@ The plugin uses the FFmpeg that OBS ships: obs-deps on Windows and macOS, the di
 | 32.2 | 2026-07-15 | 8.1 | 62 |
 | 33.0 (beta) | 2026-08-26 | 8.1 | 62 |
 
-A build therefore supports the OBS versions that share its FFmpeg major. At load the plugin compares the runtime library versions with the ones it was built against. On a mismatch the iPhone Camera source shows an error naming the right plugin build, instead of crashing OBS.
+A build therefore supports the OBS versions that share its FFmpeg major. With any other major the libraries the plugin links against are missing, so the plugin does not load and OBS names it in its own "Plugin Load Error" message; a mismatch cannot crash OBS. The receiver code compiles against both FFmpeg 6.1 (Linux) and 8.1 (Windows, macOS).
 
 ### Latency budget
 
