@@ -7,7 +7,7 @@ Every release ships for Windows, macOS and Linux at once (NFR-3). The build come
 | Platform | Toolchain | CI runner | Package |
 | --- | --- | --- | --- |
 | Windows 10 and 11, x64 | Visual Studio 2022, CMake 3.30 | `windows-2022` | `.exe` installer and `.zip` |
-| macOS 12 or newer, universal (Apple Silicon and Intel) | Xcode 16, CMake 3.30 | `macos-15` | `.pkg`, signed and notarized |
+| macOS 12 or newer, universal (Apple Silicon and Intel) | Xcode 26.5, CMake 3.30 | `macos-26` | `.pkg`, signed and notarized |
 | Ubuntu 24.04, x86_64 | GCC 13, Ninja, CMake 3.28 | `ubuntu-24.04` | `.deb` |
 
 The Windows installer is the one addition to the template's packaging: a small Inno Setup script, built in CI, that finds OBS and installs into `C:\ProgramData\obs-studio\plugins\obs-bmagicam`. The `.zip` holds the same files for installing by hand. Inno Setup is preinstalled on GitHub's Windows runners.
@@ -30,11 +30,11 @@ On Ubuntu the same libraries come from the distribution: `obs-studio` (PPA), `li
 
 On Ubuntu the plugin builds against OBS from the PPA and the distribution's libraries, the same ones that OBS uses there: FFmpeg 6.1, Mbed TLS 2.28 and Qt 6.4. The code therefore sticks to APIs that exist in both those versions and the obs-deps ones.
 
-When OBS moves to a new FFmpeg major ([architecture.md](architecture.md#ffmpeg-abi)), the pins move with it in a new plugin release. Until then, OBS reports the plugin in its "Plugin Load Error" message instead of loading it.
+When OBS moves to a new FFmpeg major ([architecture.md](architecture.md#ffmpeg-abi)), the pins move with it in a new plugin release. Until then, a mismatched combination does not run ([architecture.md](architecture.md#ffmpeg-abi)).
 
 ## Building locally
 
-Presets come from the template. macOS needs Xcode 16 or newer; the Command Line Tools alone are not enough, because the template builds with the Xcode generator.
+Presets come from the template. macOS needs Xcode 26.5 or newer, the version OBS 32.2 requires; the Command Line Tools alone are not enough, because the template builds with the Xcode generator.
 
 ```sh
 cmake --preset macos         && cmake --build --preset macos
