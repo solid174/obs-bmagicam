@@ -115,3 +115,6 @@ jobs:
           if (-not (Select-String -Path $Log.FullName -Pattern '\[obs-bmagicam\] plugin loaded successfully' -Quiet)) {
             throw 'obs-bmagicam did not load in OBS'
           }
+          if (Select-String -Path $Log.FullName -Pattern '\[obs-bmagicam\] (this build is for|cannot receive SRT)' -Quiet) {
+            throw 'the FFmpeg in OBS cannot run the stream receiver'
+          }

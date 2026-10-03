@@ -6,6 +6,7 @@
 
 #include "filter/beautify-filter.hpp"
 #include "source/camera-source.hpp"
+#include "stream/ffmpeg-check.hpp"
 #include "ui/frontend.hpp"
 
 OBS_DECLARE_MODULE()
@@ -24,6 +25,9 @@ const char *obs_module_description(void)
 
 bool obs_module_load(void)
 {
+	// Logs now if the FFmpeg in OBS cannot run the stream receiver
+	bmagicam::ffmpeg_usable();
+
 	bmagicam::register_camera_source();
 	bmagicam::register_beautify_filter();
 	bmagicam::ui::load();

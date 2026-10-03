@@ -39,3 +39,8 @@ if ! grep -q '\[obs-bmagicam\] plugin loaded successfully' "${log}"; then
   echo '::error::obs-bmagicam did not load in OBS'
   exit 1
 fi
+
+if grep -E '\[obs-bmagicam\] (this build is for|cannot receive SRT)' "${log}"; then
+  echo '::error::the FFmpeg in OBS cannot run the stream receiver'
+  exit 1
+fi
