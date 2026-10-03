@@ -369,3 +369,4 @@ What this means:
 - The server pauses for a few seconds after a video format change.
 - Starting the livestream in vertical mode once switched the camera's video format to `3840x2160p60`, and it stayed so after the stream stopped. The plugin sets the format from the stream preset anyway, and its before snapshot keeps the user's format.
 - The first request after a pause sometimes times out; the next one answers. The client retries.
+- A request with `Expect: 100-continue` is refused with 400 (`"Expect: 100-continue is not supported"`). HTTP libraries that add it to larger bodies, such as cpp-httplib above 1 KB, must be told not to.

@@ -31,9 +31,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(httplib)
 add_library(httplib INTERFACE)
 target_include_directories(httplib SYSTEM INTERFACE "${httplib_SOURCE_DIR}")
+# Blackmagic Camera rejects requests that announce their body with "Expect: 100-continue"
 target_compile_definitions(
   httplib
-  INTERFACE CPPHTTPLIB_MBEDTLS_SUPPORT CPPHTTPLIB_DISABLE_MACOSX_AUTOMATIC_ROOT_CERTIFICATES
+  INTERFACE
+    CPPHTTPLIB_MBEDTLS_SUPPORT
+    CPPHTTPLIB_DISABLE_MACOSX_AUTOMATIC_ROOT_CERTIFICATES
+    CPPHTTPLIB_EXPECT_100_THRESHOLD=0
 )
 target_link_libraries(httplib INTERFACE MbedTLS::mbedtls)
 
