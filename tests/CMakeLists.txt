@@ -11,7 +11,16 @@ set(DOCTEST_NO_INSTALL ON)
 FetchContent_MakeAvailable(doctest)
 
 add_executable(obs-bmagicam-tests)
-target_sources(obs-bmagicam-tests PRIVATE test-main.cpp media-clock-test.cpp ../src/stream/media-clock.cpp)
+target_sources(
+  obs-bmagicam-tests
+  PRIVATE
+    test-main.cpp
+    media-clock-test.cpp
+    streaming-test.cpp
+    ../src/camera/stream-presets.cpp
+    ../src/camera/streaming-xml.cpp
+    ../src/stream/media-clock.cpp
+)
 target_include_directories(obs-bmagicam-tests PRIVATE ../src)
 target_link_libraries(obs-bmagicam-tests PRIVATE doctest::doctest)
 

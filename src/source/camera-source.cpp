@@ -3,8 +3,8 @@
 
 #include "camera-source.hpp"
 
-#include "../stream/ffmpeg-check.hpp"
-#include "../stream/stream-receiver.hpp"
+#include "../camera/camera-session.hpp"
+#include "../camera/stream-presets.hpp"
 
 #include <obs-module.h>
 #include <plugin-support.h>
@@ -15,13 +15,24 @@ extern "C" {
 #include <libavutil/pixdesc.h>
 }
 
+#include <mutex>
+#include <set>
+#include <string>
+
 namespace bmagicam {
 
 namespace {
 
+constexpr const char *kStatus = "status";
+constexpr const char *kAddress = "address";
+constexpr const char *kPreset = "preset";
 constexpr const char *kPort = "port";
 constexpr const char *kLatency = "latency";
 constexpr const char *kHardwareDecoding = "hardware_decoding";
+
+// Automatic ports are the first free ones from here; the setup guide opens this range in firewalls
+constexpr int kFirstPort = 9710;
+constexpr int kLastPort = 9719;
 
 video_format obs_format(int format)
 {
@@ -71,52 +82,134 @@ video_trc obs_trc(const AVFrame &frame)
 	}
 }
 
-class CameraSource final : public StreamReceiver::Sink {
+// UDP ports taken by iPhone Camera sources in this OBS
+class Ports {
 public:
-	CameraSource(obs_source_t *source, obs_data_t *settings) : source_(source), receiver_(*this, os_gettime_ns)
+	// The requested port, or the first free one when it is 0 (automatic). Gives up the source's current port.
+	static int take(int requested, int current)
+	{
+		std::lock_guard lock(mutex());
+		used().erase(current);
+		int port = requested;
+		for (int candidate = kFirstPort; port == 0 && candidate <= kLastPort; candidate++) {
+			if (!used().count(candidate))
+				port = candidate;
+		}
+		if (port == 0)
+			port = kLastPort + 1 + static_cast<int>(used().size());
+		used().insert(port);
+		return port;
+	}
+
+	static void release(int port)
+	{
+		std::lock_guard lock(mutex());
+		used().erase(port);
+	}
+
+private:
+	static std::mutex &mutex()
+	{
+		static std::mutex instance;
+		return instance;
+	}
+
+	static std::set<int> &used()
+	{
+		static std::set<int> instance;
+		return instance;
+	}
+};
+
+std::string status_text(const CameraSession::Status &status)
+{
+	switch (status.state) {
+	case CameraSession::State::NoPhone:
+		return obs_module_text("Status.NoPhone");
+	case CameraSession::State::Connecting:
+		return obs_module_text("Status.Connecting");
+	case CameraSession::State::Starting:
+		return obs_module_text("Status.Starting");
+	case CameraSession::State::Live:
+		return std::string(obs_module_text("Status.Live")) + " · " + status.detail;
+	case CameraSession::State::Paused:
+		return obs_module_text("Status.Paused");
+	case CameraSession::State::Error:
+		break;
+	}
+
+	switch (status.problem) {
+	case CameraSession::Problem::NotAnswering:
+		return obs_module_text("Status.NotAnswering");
+	case CameraSession::Problem::MonitorOnly:
+		return obs_module_text("Status.MonitorOnly");
+	case CameraSession::Problem::CannotReach:
+		return obs_module_text("Status.CannotReach");
+	case CameraSession::Problem::Unavailable:
+		return std::string(obs_module_text("Status.Unavailable")) + " (" + status.detail + ")";
+	case CameraSession::Problem::Refused:
+		return obs_module_text("Status.Refused");
+	case CameraSession::Problem::FFmpeg:
+		return obs_module_text("Status.FFmpeg");
+	case CameraSession::Problem::None:
+		break;
+	}
+	return {};
+}
+
+class CameraSource final : public CameraSession::Output {
+public:
+	CameraSource(obs_source_t *source, obs_data_t *settings) : source_(source), session_(*this, os_gettime_ns)
 	{
 		update(settings);
 	}
 
-	// The receiver calls back into this object, so it stops before the object goes away
-	~CameraSource() override { receiver_.stop(); }
+	~CameraSource() override { Ports::release(port_); }
 
 	void update(obs_data_t *settings);
+	void set_shown(bool shown) { session_.set_active(shown); }
+	void add_status(obs_properties_t *properties) const;
 
-	void stream_started() override {}
-	void stream_video(const AVFrame &frame, uint64_t timestamp) override;
-	void stream_audio(const float *const planes[2], uint32_t frames, uint64_t timestamp) override;
-	void stream_ended() override { obs_source_output_video(source_, nullptr); }
+	void session_video(const AVFrame &frame, uint64_t timestamp) override;
+	void session_audio(const float *const planes[2], uint32_t frames, uint64_t timestamp) override;
+	void session_cleared() override { obs_source_output_video(source_, nullptr); }
+	void session_status_changed() override { obs_source_update_properties(source_); }
 
 private:
 	obs_source_t *source_;
-	StreamReceiver receiver_;
-	StreamReceiver::Settings settings_;
-	bool receiving_ = false;
+	int port_ = 0;
 	bool logged_format_ = false;
+	// Last, so that it ends first and stops calling back into this object
+	CameraSession session_;
 };
 
 void CameraSource::update(obs_data_t *settings)
 {
-	StreamReceiver::Settings next;
-	next.port = static_cast<int>(obs_data_get_int(settings, kPort));
-	next.latency_ms = static_cast<int>(obs_data_get_int(settings, kLatency));
-	next.hardware_decoding = obs_data_get_bool(settings, kHardwareDecoding);
+	port_ = Ports::take(static_cast<int>(obs_data_get_int(settings, kPort)), port_);
 
-	const bool changed = next.port != settings_.port || next.latency_ms != settings_.latency_ms ||
-			     next.hardware_decoding != settings_.hardware_decoding;
-	if (receiving_ && !changed)
-		return;
-
-	settings_ = next;
-	if (!ffmpeg_usable())
-		return;
-
-	receiver_.start(settings_);
-	receiving_ = true;
+	CameraSession::Settings next;
+	next.address = obs_data_get_string(settings, kAddress);
+	next.preset = obs_data_get_string(settings, kPreset);
+	next.receiver.port = port_;
+	next.receiver.latency_ms = static_cast<int>(obs_data_get_int(settings, kLatency));
+	next.receiver.hardware_decoding = obs_data_get_bool(settings, kHardwareDecoding);
+	session_.update(next);
 }
 
-void CameraSource::stream_video(const AVFrame &frame, uint64_t timestamp)
+void CameraSource::add_status(obs_properties_t *properties) const
+{
+	const CameraSession::Status status = session_.status();
+	std::string text = status_text(status);
+	if (!status.phone.empty() && status.state != CameraSession::State::Error)
+		text = status.phone + ": " + text;
+
+	obs_property_t *property = obs_properties_add_text(properties, kStatus, text.c_str(), OBS_TEXT_INFO);
+	obs_property_text_set_info_type(property, status.state == CameraSession::State::Error ? OBS_TEXT_INFO_ERROR
+											      : OBS_TEXT_INFO_NORMAL);
+	obs_property_text_set_info_word_wrap(property, true);
+}
+
+void CameraSource::session_video(const AVFrame &frame, uint64_t timestamp)
 {
 	const video_format format = obs_format(frame.format);
 	if (format == VIDEO_FORMAT_NONE) {
@@ -144,7 +237,7 @@ void CameraSource::stream_video(const AVFrame &frame, uint64_t timestamp)
 	obs_source_output_video2(source_, &out);
 }
 
-void CameraSource::stream_audio(const float *const planes[2], uint32_t frames, uint64_t timestamp)
+void CameraSource::session_audio(const float *const planes[2], uint32_t frames, uint64_t timestamp)
 {
 	obs_source_audio audio = {};
 	audio.data[0] = reinterpret_cast<const uint8_t *>(planes[0]);
@@ -177,19 +270,44 @@ void camera_update(void *data, obs_data_t *settings)
 	static_cast<CameraSource *>(data)->update(settings);
 }
 
+void camera_show(void *data)
+{
+	static_cast<CameraSource *>(data)->set_shown(true);
+}
+
+void camera_hide(void *data)
+{
+	static_cast<CameraSource *>(data)->set_shown(false);
+}
+
 void camera_defaults(obs_data_t *settings)
 {
-	obs_data_set_default_int(settings, kPort, 9710);
+	obs_data_set_default_string(settings, kPreset, stream_presets().front().id);
+	obs_data_set_default_int(settings, kPort, 0);
 	obs_data_set_default_int(settings, kLatency, 120);
 	obs_data_set_default_bool(settings, kHardwareDecoding, true);
 }
 
-obs_properties_t *camera_properties(void *)
+obs_properties_t *camera_properties(void *data)
 {
 	obs_properties_t *properties = obs_properties_create();
+	if (data)
+		static_cast<const CameraSource *>(data)->add_status(properties);
 
-	obs_property_t *port =
-		obs_properties_add_int(properties, kPort, obs_module_text("Camera.Port"), 1024, 65535, 1);
+	obs_property_t *address =
+		obs_properties_add_text(properties, kAddress, obs_module_text("Camera.Address"), OBS_TEXT_DEFAULT);
+	obs_property_set_long_description(address, obs_module_text("Camera.Address.Tooltip"));
+
+	obs_property_t *preset = obs_properties_add_list(properties, kPreset, obs_module_text("Camera.Preset"),
+							 OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+	std::string tooltip = obs_module_text("Camera.Preset.Tooltip");
+	for (const StreamPreset &item : stream_presets()) {
+		obs_property_list_add_string(preset, item.profile, item.id);
+		tooltip += std::string("\n") + item.profile + ": " + obs_module_text(item.description_key);
+	}
+	obs_property_set_long_description(preset, tooltip.c_str());
+
+	obs_property_t *port = obs_properties_add_int(properties, kPort, obs_module_text("Camera.Port"), 0, 65535, 1);
 	obs_property_set_long_description(port, obs_module_text("Camera.Port.Tooltip"));
 
 	obs_property_t *latency =
@@ -217,6 +335,8 @@ void register_camera_source()
 	info.create = camera_create;
 	info.destroy = camera_destroy;
 	info.update = camera_update;
+	info.show = camera_show;
+	info.hide = camera_hide;
 	info.get_defaults = camera_defaults;
 	info.get_properties = camera_properties;
 	obs_register_source(&info);

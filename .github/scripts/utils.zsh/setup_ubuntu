@@ -44,8 +44,10 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)deps]}) )) {
     libavformat-dev \
     libavutil-dev \
     libgles2-mesa-dev \
+    libmbedtls-dev \
     libsimde-dev \
     libswresample-dev \
+    nlohmann-json3-dev \
     obs-studio
 
   local -a _qt_packages=()
