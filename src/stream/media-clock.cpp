@@ -92,7 +92,7 @@ void MediaClock::on_packet(Stream stream, int64_t pts_ns, int64_t arrival_ns)
 		} else {
 			excess_windows_ = 0;
 			const double seconds = static_cast<double>(elapsed) / 1e9;
-			const auto step = std::llround(config_.delay_gain * static_cast<double>(error) * seconds);
+			const int64_t step = std::llround(config_.delay_gain * static_cast<double>(error) * seconds);
 			delay_ += std::clamp(step, -config_.max_step_ns, config_.max_step_ns);
 			rate_ = std::clamp(rate_ + config_.rate_gain * static_cast<double>(error) / 1e9 * seconds,
 					   -config_.max_rate, config_.max_rate);
