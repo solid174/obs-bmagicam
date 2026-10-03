@@ -17,6 +17,8 @@ find_package(obs-frontend-api REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 find_package(FFmpeg REQUIRED COMPONENTS avcodec avformat avutil swresample)
 
+target_link_libraries(plugin-support PUBLIC OBS::libobs)
+
 target_link_libraries(
   ${CMAKE_PROJECT_NAME}
   PRIVATE

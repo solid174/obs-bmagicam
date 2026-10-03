@@ -6,30 +6,35 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <iterator>
 
 namespace bmagicam {
 
 void MediaClock::reset()
 {
 	started_ = false;
-	first_window_ = true;
+	settled_ = false;
 	delay_ = 0;
-	window_start_ = 0;
-	std::fill(std::begin(window_min_delay_), std::end(window_min_delay_), kNoPacket);
+	start_ = 0;
+	excess_windows_ = 0;
+	std::fill(std::begin(first_arrival_), std::end(first_arrival_), kNone);
+	start_window(0);
 }
 
-int64_t MediaClock::latest_min_delay() const
+int64_t MediaClock::window_max_delay() const
 {
-	int64_t latest = INT64_MIN;
-	for (int64_t min_delay : window_min_delay_) {
-		if (min_delay != kNoPacket)
-			latest = std::max(latest, min_delay);
-	}
-	return latest;
+	return std::max(window_max_delay_[0], window_max_delay_[1]);
+}
+
+void MediaClock::start_window(int64_t arrival_ns)
+{
+	window_start_ = arrival_ns;
+	std::fill(std::begin(window_max_delay_), std::end(window_max_delay_), kNone);
 }
 
 void MediaClock::on_packet(Stream stream, int64_t pts_ns, int64_t arrival_ns)
 {
+	const auto index = static_cast<size_t>(stream);
 	const int64_t delay = arrival_ns - pts_ns;
 
 	if (started_ && std::llabs(delay - delay_) > config_.discontinuity_ns)
@@ -37,27 +42,50 @@ void MediaClock::on_packet(Stream stream, int64_t pts_ns, int64_t arrival_ns)
 
 	if (!started_) {
 		started_ = true;
-		window_start_ = arrival_ns;
+		start_ = arrival_ns;
+		start_window(arrival_ns);
 	}
+	if (first_arrival_[index] == kNone)
+		first_arrival_[index] = arrival_ns;
 
-	int64_t &window_min = window_min_delay_[static_cast<int>(stream)];
-	window_min = std::min(window_min, delay);
+	window_max_delay_[index] = std::max(window_max_delay_[index], delay);
 
-	// Packets read while the connection was set up come in a burst, later than the ones after them, so during the
-	// first window the delay is simply the least one seen
-	if (first_window_)
-		delay_ = latest_min_delay();
+	if (!settled_) {
+		// Measure from when both streams are there and the burst after connecting is over
+		const bool both_arrived = first_arrival_[0] != kNone && first_arrival_[1] != kNone;
+		const int64_t measure_from =
+			std::max(start_ + config_.burst_ns,
+				 both_arrived ? std::max(first_arrival_[0], first_arrival_[1]) : start_);
+		if (window_start_ < measure_from && arrival_ns >= measure_from) {
+			start_window(arrival_ns);
+			window_max_delay_[index] = delay;
+		}
+		delay_ = window_max_delay();
+
+		const bool measured = window_start_ >= measure_from && arrival_ns - window_start_ >= config_.settle_ns;
+		if ((both_arrived && measured) || arrival_ns - start_ >= config_.max_settle_ns) {
+			settled_ = true;
+			start_window(arrival_ns);
+		}
+		return;
+	}
 
 	const int64_t elapsed = arrival_ns - window_start_;
 	if (elapsed >= config_.window_ns) {
-		if (!first_window_) {
+		const int64_t difference = window_max_delay() - delay_;
+		if (-difference > config_.drop_excess_ns) {
+			if (++excess_windows_ >= config_.drop_excess_windows) {
+				delay_ += difference;
+				excess_windows_ = 0;
+			}
+		} else {
+			excess_windows_ = 0;
 			const double share =
 				std::min(1.0, static_cast<double>(elapsed) / static_cast<double>(config_.follow_ns));
-			delay_ += std::llround(static_cast<double>(latest_min_delay() - delay_) * share);
+			const int64_t step = std::llround(static_cast<double>(difference) * share);
+			delay_ += std::clamp(step, -config_.max_step_ns, config_.max_step_ns);
 		}
-		first_window_ = false;
-		window_start_ = arrival_ns;
-		std::fill(std::begin(window_min_delay_), std::end(window_min_delay_), kNoPacket);
+		start_window(arrival_ns);
 	}
 
 	const int64_t slack = delay_ + config_.buffer_ns - delay;

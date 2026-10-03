@@ -4,7 +4,6 @@
 #include "ffmpeg-check.hpp"
 
 #include <plugin-support.h>
-#include <util/base.h>
 
 extern "C" {
 #include <libavcodec/avcodec.h>

@@ -4,10 +4,7 @@
 #pragma once
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
-#include <deque>
-#include <mutex>
 #include <thread>
 
 struct AVFrame;
@@ -15,8 +12,9 @@ struct AVFrame;
 namespace bmagicam {
 
 // Receives the phone's livestream: listens for SRT on a UDP port, demuxes the MPEG-TS, decodes the video (in
-// hardware where possible) and the AAC audio, and hands both to the sink on one timeline (see MediaClock). Video
-// frames are handed over at their presentation time, audio as soon as it is decoded, with its timestamps.
+// hardware where possible) and the AAC audio, and hands both to the sink on one timeline (see MediaClock). Audio is
+// handed over as soon as it is decoded, with its timestamps. Video waits as compressed packets, is decoded shortly
+// before its presentation time and handed over at that time.
 class StreamReceiver {
 public:
 	class Sink {
@@ -53,33 +51,13 @@ public:
 private:
 	class Connection;
 
-	struct Event {
-		enum class Kind { Started, Frame, Ended };
-		Kind kind;
-		AVFrame *frame;
-		uint64_t timestamp;
-	};
-
 	void receive_loop();
-	void pace_loop();
-	void queue(const Event &event);
 
 	Sink &sink_;
 	const Clock clock_;
 	Settings settings_;
-
 	std::atomic<bool> stopping_ = false;
 	std::thread receive_thread_;
-
-	std::thread pace_thread_;
-	std::mutex pace_mutex_;
-	std::condition_variable pace_cv_;
-	std::deque<Event> pace_queue_;
-	bool pace_stopping_ = false;
-	bool stream_active_ = false;
-
-	std::atomic<uint32_t> late_frames_ = 0;
-	std::atomic<uint32_t> dropped_frames_ = 0;
 };
 
 } // namespace bmagicam
