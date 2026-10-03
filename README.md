@@ -2,7 +2,7 @@
 
 An OBS Studio plugin that turns an iPhone running the free Blackmagic Camera app into a 60 fps camera on your local network, with every camera setting in an OBS dock.
 
-> **Status:** in development. The plugin skeleton (milestone M0 in [architecture.md](docs/architecture.md#milestones)) builds for all three systems; the documentation below describes version 1.0, and there is no release yet.
+> **Status:** in development ([milestones](docs/architecture.md#milestones)). M0, the skeleton, is done. M1, the camera, is under way: the receiver and the phone setup work against a real iPhone; finding phones on the network and the setup wizard come next. The documentation below describes version 1.0, and there is no release yet.
 
 Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name the app the plugin works with.
 
