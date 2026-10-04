@@ -374,5 +374,6 @@ What this means:
 - An upload under a destination name the phone already has fails with an alert on the phone's screen, but answers 204.
 - A livestream that breaks reconnects by itself, usually within a second.
 - After a restart (a stop and start, or selecting a destination while streaming), the phone's next SRT connection sometimes carries no media while `/livestreams/0` reports `Streaming` with bitrate 0. One such connection stayed open for about three minutes, so a receiver must close a connection that sends nothing.
+- Right after a livestream restart, the phone's screen locked by itself (it had not been touched for a while), and the server stopped with it. The setup guide asks for Auto-Lock: Never.
 - After the phone reconnected by itself, `/livestreams/0` kept reporting `Connecting` with frozen `duration` and `bitrate` while the stream arrived normally.
 - A request with `Expect: 100-continue` is refused with 400 (`"Expect: 100-continue is not supported"`). HTTP libraries that add it to larger bodies, such as cpp-httplib above 1 KB, must be told not to.

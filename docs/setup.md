@@ -37,7 +37,7 @@ Start OBS. The Tools menu now has **Add iPhone Camera…**.
    </p>
 
 3. When iOS asks whether Blackmagic Camera may find devices on your local network, tap **Allow**. If you tapped Don't Allow earlier: iPhone Settings → Privacy & Security → Local Network → Blackmagic Camera → on.
-4. Keep the app open on screen while you stream. iOS stops the app's server when the screen locks or you switch apps. A charger keeps a long stream going.
+4. Keep the app open on screen while you stream, and set Auto-Lock to **Never** (iPhone Settings → Display & Brightness → Auto-Lock). iOS stops the app's server when the screen locks or you switch apps. A charger keeps a long stream going.
 
 Under Settings → Remote Camera Control, **Camera Available for** must say **Control and Monitor**, which is the default.
 
