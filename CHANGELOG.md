@@ -2,6 +2,10 @@
 
 User-visible changes in each release. Versions follow [semantic versioning](https://semver.org).
 
+## 1.0.1 (2026-10-04)
+
+- When the phone says it streams but no picture arrives, the dock now first asks you to look at the phone's screen for a message from Blackmagic Camera, such as "Audio Source Unavailable", and only then to check the firewall and the network.
+
 ## 1.0.0 (2026-10-04)
 
 The first release.
