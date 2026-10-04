@@ -92,6 +92,8 @@ target_sources(
     src/stream/media-clock.hpp
     src/stream/stream-receiver.cpp
     src/stream/stream-receiver.hpp
+    src/ui/add-camera-wizard.cpp
+    src/ui/add-camera-wizard.hpp
     src/ui/controls-dock.cpp
     src/ui/controls-dock.hpp
     src/ui/frontend.cpp

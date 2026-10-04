@@ -31,9 +31,9 @@ Start OBS. The Tools menu now has **Add iPhone Camera…**.
    3. Turn on **Enable HTTP Server**. The switch turns blue.
 
    <p>
-   <img src="images/setup/iphone-1-settings.png" width="240" alt="Blackmagic Camera settings: 1, the Settings tab; 2, HTTP Server under Network Access">
-   <img src="images/setup/iphone-2-enable.png" width="240" alt="3: turn on Enable HTTP Server">
-   <img src="images/setup/iphone-3-enabled.png" width="240" alt="Enable HTTP Server turned on">
+   <img src="../data/images/setup/iphone-1-settings.png" width="240" alt="Blackmagic Camera settings: 1, the Settings tab; 2, HTTP Server under Network Access">
+   <img src="../data/images/setup/iphone-2-enable.png" width="240" alt="3: turn on Enable HTTP Server">
+   <img src="../data/images/setup/iphone-3-enabled.png" width="240" alt="Enable HTTP Server turned on">
    </p>
 
 3. When iOS asks whether Blackmagic Camera may find devices on your local network, tap **Allow**. If you tapped Don't Allow earlier: iPhone Settings → Privacy & Security → Local Network → Blackmagic Camera → on.
