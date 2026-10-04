@@ -70,6 +70,8 @@ public:
 			if (!password.isEmpty()) {
 				auto shown = new QLineEdit(password, this);
 				shown->setReadOnly(true);
+				shown->setMinimumWidth(fontMetrics().horizontalAdvance(password) +
+						       fontMetrics().height() * 2);
 				form->addRow(text("Remote.Password"), shown);
 			}
 			layout->addLayout(form);
@@ -158,6 +160,7 @@ RemoteDialog::RemoteDialog(QWidget *parent) : QDialog(parent)
 	auto layout = new QVBoxLayout(this);
 	auto form = new QFormLayout();
 	enabled_ = new QCheckBox(text("Remote.Enable"), this);
+	enabled_->setObjectName("remoteEnabled");
 	enabled_->setChecked(settings.enabled);
 	enabled_->setToolTip(text("Remote.Enable.Tooltip"));
 	form->addRow(enabled_);
@@ -186,6 +189,7 @@ RemoteDialog::RemoteDialog(QWidget *parent) : QDialog(parent)
 	layout->addLayout(form);
 
 	auto connect_info = new QPushButton(text("Remote.ConnectInfo"), this);
+	connect_info->setObjectName("showConnectInfo");
 	layout->addWidget(connect_info, 0, Qt::AlignLeft);
 	auto note = new QLabel(text("Remote.Note"), this);
 	note->setWordWrap(true);
