@@ -2,7 +2,7 @@
 
 User-visible changes in each release. Versions follow [semantic versioning](https://semver.org).
 
-## 1.0.0 (unreleased)
+## 1.0.0 (2026-10-04)
 
 The first release.
 
