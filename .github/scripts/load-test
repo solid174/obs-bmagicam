@@ -10,13 +10,18 @@ log_dir=$1
 process_name=$2
 shift 2
 
+# Only a log written by this start counts, also when an earlier start left one
+previous=$(ls -t "${log_dir}"/*.txt 2> /dev/null | head -n 1 || true)
+
 "$@" > "${RUNNER_TEMP:-/tmp}/obs-output.txt" 2>&1 &
 obs_pid=$!
 
 log=''
 for _ in $(seq 1 120); do
   log=$(ls -t "${log_dir}"/*.txt 2> /dev/null | head -n 1 || true)
-  if [[ -n ${log} ]] && grep -q '==== Startup complete' "${log}"; then
+  if [[ ${log} == "${previous}" ]]; then
+    log=''
+  elif [[ -n ${log} ]] && grep -q '==== Startup complete' "${log}"; then
     break
   fi
   if ! kill -0 "${obs_pid}" 2> /dev/null; then
