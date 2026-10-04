@@ -56,7 +56,7 @@ The dock's own controls, modelled on Blackmagic Camera's (reviewed from a screen
 | Ruler | A horizontal scale with ticks and labels under a fixed center mark, the value in a small box above it. Drag the scale, or scroll when focused; it snaps to the values the phone supports and marks special ones (✓ for flicker-free shutters). Double-click to type an exact value | Zoom, ISO, shutter, white balance, tint, focus, color values; Brightness, Warmth and Beauty in Simple mode |
 | Parameter tile | A small label over a large value, an "A" badge while the camera sets it automatically; the selected tile is filled with the highlight color. Selecting a tile opens its ruler below the strip | Advanced: Lens, FPS, Shutter, Iris, ISO, WB and Tint, the strip the app shows |
 | Button row | Buttons with an icon and a caption, one selected | Lens (Front, 0.5×, 1×, 2×, 4×, 8×), Look |
-| Segmented control | Joined buttons, one selected | Stabilization (Off, Standard, Cinematic, Extreme), focus mode, auto exposure |
+| Segmented control | Joined buttons, one selected | Stabilization (Off, On), focus mode, auto exposure |
 | Chip | A small rounded toggle | Auto on Brightness and Warmth, Auto focus |
 | Histogram | Luma and RGB histogram of the received picture, like the app's | Advanced: judging exposure. Computed from every fourth decoded frame at low resolution |
 | Quick values | A row of small buttons under a ruler for the values used most | White balance presets (tungsten 3200 K, fluorescent 4000 K, daylight 5600 K, cloudy 6500 K, shade 7500 K), the flicker-free shutters |
@@ -101,7 +101,7 @@ The default. Everything a streamer needs, on one page, in everyday words. Select
 │             ┆ · · · ┆ · · · ┆ ·┃· · ┆ · · · ┆ · · · ┆            │
 │ Lens        [Front]  0.5×   1×   2×   4×   8×                    │
 │ Focus       (Auto)  [Refocus]                                    │
-│ Stabilize   [Off]  Standard  Cinematic  Extreme                  │
+│ Stabilize   [Off]  On                                            │
 │ Microphone  [Mic/Aux                 ▾]  [Sync]                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -115,7 +115,7 @@ The default. Everything a streamer needs, on one page, in everyday words. Select
 | Warmth | `wb.temperature`, `wb.auto` | Cool to warm, no Kelvin numbers |
 | Lens | `lens.camera` | Front, then one button per back lens, labelled the way the iPhone camera labels them (0.5×, 1×, 2×…) |
 | Focus | `focus.mode` (Continuous or One shot), `focus.refocus` | The tooltip mentions clicking the picture in Interact |
-| Stabilization | `lens.stabilization` | The app's modes: Off, Standard, Cinematic, Extreme (STB-2) |
+| Stabilization | `lens.stabilization` | Off or On. On from OBS is Standard; Cinematic and Extreme are chosen on the phone and show as On (STB-2) |
 | Microphone | `audio.syncMicrophone` | Only when the scene has a microphone of the computer's: picks it and syncs it to the picture (SYN-1). The button turns into "Synced · 412 ms" with Undo |
 
 Zoom, the color sliders and everything else stay in Advanced. A status line appears under the rows only when something needs attention, for example "Phone battery at 15 %. Connect a charger." The stream details (format, bitrate, frame rate) are in Advanced and in the state tooltip.
@@ -201,7 +201,7 @@ Examples:
 | Warmth | Shifts colors cooler (blue) or warmer (orange) to match your lights. Auto sets it once from what the camera sees. |
 | Lens | Switches between the phone's cameras. Front faces you like a selfie; the back lenses give the best picture. |
 | Microphone | Your computer's microphone hears you before the iPhone's picture shows you, by about half a second. Sync delays the microphone to match: talk or clap for a few seconds. |
-| Stabilization | Steadies handheld shots: Standard for small shakes, Cinematic for smooth moves, Extreme for walking. It crops the picture, more in the stronger modes, so leave it Off on a tripod. |
+| Stabilization | Steadies handheld shots. On is Standard, for small shakes. For smooth moves (Cinematic) or walking (Extreme), choose the mode in Blackmagic Camera on the phone; OBS then shows On. Stabilization crops the picture, more in the stronger modes, so leave it Off on a tripod. |
 | ISO (Advanced) | How sensitive the sensor is. Higher is brighter but grainier; keep it as low as your light allows. |
 | Shutter (Advanced) | How long each frame is exposed. Values marked ✓ avoid flicker from room lights; at 60 fps, 1/120 (1/100 where mains power is 50 Hz) looks most natural. |
 | Phone screen brightness (Advanced) | Brightness of the phone's own screen; the stream does not change. Lower keeps the phone cooler on long streams. |
@@ -245,7 +245,7 @@ Every setting the app offers over its API, with the ID used by the dock, the web
 | Lens | Camera | `lens.camera` | Choice, e.g. "Back 1× · 24 mm" | `/lens/cameras`, `/lens/cameras/active` | 7 lenses | yes |
 | Lens | Automatic lens switching | `lens.auto` | Switch | `/lens/cameras/auto` | hidden: not supported | yes |
 | Lens | Zoom | `lens.zoom` | Continuous, shows mm | `/lens/zoom` | 19–570 mm | yes |
-| Lens | Stabilization | `lens.stabilization` | Choice: Off, Standard, Cinematic, Extreme (STB-2) | `/lens/opticalImageStabilization` (V-15) | on | yes |
+| Lens | Stabilization | `lens.stabilization` | Choice: Off, On (STB-2) | `/lens/opticalImageStabilization` `enabled`: false is Off, true is Standard when written and any other mode when read | on | yes |
 | Focus | Autofocus | `focus.mode` | Choice: Off, One shot, Continuous, Track face, Track object (as supported) | `/lens/focus/autoFocus` | One shot, Continuous | yes |
 | Focus | Focus | `focus.position` | Continuous, near to far | `/lens/focus` | 0–1 | yes, locked under continuous autofocus |
 | Focus | Refocus | `focus.refocus` | Action | `/lens/focus/autoFocus/retrigger` | — | yes |

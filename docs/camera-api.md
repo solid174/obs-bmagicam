@@ -145,7 +145,7 @@ Not supported on iPhone (404): `/video/gain`, `/video/supportedGains`, `/video/n
 | `GET/PUT /lens/focus/autoFocus/target` | `x`, `y`, optional `width`, `height` (0–1) | 0.5, 0.5 |
 | `PUT /lens/focus/autoFocus/retrigger` | — | Refocus |
 | `PUT /lens/focus/doAutoFocus` | `position.x`, `position.y` (0–1) | Tap-to-focus at a point |
-| `GET/PUT /lens/opticalImageStabilization` | `enabled` | true |
+| `GET/PUT /lens/opticalImageStabilization` | `enabled`: `false` is the app's stabilization Off. `true` reads for Standard, Cinematic and Extreme alike, and writing it sets Standard | true |
 | `GET/PUT /lens/iris` | `apertureStop`, `normalized` | f/1.9, `controllable: false` |
 
 Lenses on the iPhone 17 Pro:

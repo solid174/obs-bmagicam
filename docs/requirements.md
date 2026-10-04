@@ -51,7 +51,7 @@ All components ship in one plugin. Source and filter do not depend on each other
 ## Stabilization
 
 - **STB-1** The stabilization setting uses Blackmagic Camera's own video stabilization, which works from the phone's gyroscope before compression and steadies handheld and moving shots very well (tried on the test phone).
-- **STB-2** The modes are the app's: Off, Standard, Cinematic and Extreme. Each says what it is for and what it costs: stabilization crops the picture, more in the stronger modes. Off suits a phone on a tripod.
+- **STB-2** The modes are the app's: Off, Standard, Cinematic and Extreme. The app's API switches only between Off and Standard and reports the other two as on (V-15), so the dock turns stabilization off and on (Standard) and shows on for any of the three; Cinematic and Extreme are chosen on the phone, and the dock says so. Each mode is explained by what it is for and what it costs: stabilization crops the picture, more in the stronger modes. Off suits a phone on a tripod.
 - **STB-3** The plugin adds no stabilization of its own.
 
 ## Microphone sync

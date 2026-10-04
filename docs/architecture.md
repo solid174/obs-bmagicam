@@ -264,7 +264,7 @@ Tests, after the reference's self-test idea: neutral settings are a bit-exact id
 
 ## Stabilization
 
-The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera offers four modes: Off, Standard, Cinematic and Extreme (STB-2). They steady handheld shots very well, so the plugin adds no stabilization of its own (STB-3). The setting maps onto the app's mode; the API offers `/lens/opticalImageStabilization` with `enabled` and `controlAvailable` (whether it can be changed in the current format), and V-15 establishes how the four modes are set through it, how much each crops and whether a mode adds delay to the livestream.
+The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera offers four modes: Off, Standard, Cinematic and Extreme (STB-2). They steady handheld shots very well, so the plugin adds no stabilization of its own (STB-3). The API has one switch for it, `/lens/opticalImageStabilization` with `enabled` and `controlAvailable` (whether it can be changed in the current format). Writing `false` sets the app to Off and `true` sets Standard; Cinematic and Extreme read as `true` and cannot be set or told apart (verified on the test phone, 2026-10-04). So the dock offers Off and On, and the stronger modes are chosen on the phone (STB-2). V-15 still measures how much each mode crops and whether a mode adds delay to the livestream.
 
 ## Remote Control server
 
@@ -346,7 +346,7 @@ To settle in development, in the milestone named:
 | V-12 | macOS Local Network permission for OBS: OBS 32.2.2 has no `NSLocalNetworkUsageDescription`. Does the prompt appear, and do Bonjour and outgoing connections work from inside OBS? | M1 |
 | V-13 | Which parameters auto exposure drives (`type`), and whether face-tracking autofocus exists on the back cameras | M2 |
 | V-14 | What happens to a running stream when the app goes to the background | M1 |
-| V-15 | Stabilization: how the API sets the app's modes Off, Standard, Cinematic and Extreme (`/lens/opticalImageStabilization` has only `enabled`), how much each crops, and whether a mode adds delay to the livestream | M1 |
+| V-15 | Stabilization: how much each mode crops, and whether a mode adds delay to the livestream. How the API sets the modes is answered in [Stabilization](#stabilization) | M1 |
 | V-16 | Lip sync: offset between sound and picture in a recording, at the start and after two hours, against NFR-6 | M1 |
 | V-17 | Does the app's Remote Password (Settings → Remote Camera Control) protect the HTTP API, and how is it sent? | M1 |
 | V-18 | How far apart audio and video arrive relative to their timestamps in the phone's stream. Answered: video 15–35 ms after audio, so video sets the delay and audio adds none | M1 |
