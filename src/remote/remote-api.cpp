@@ -330,7 +330,8 @@ Reply put_control(const std::string &camera, const std::string &control_id, cons
 	if (!body.is_object() || (!body.contains("value") && control->kind != ControlKind::Action))
 		return error(400, "invalid", "The body must be {\"value\": ...}");
 	const nlohmann::json value = body.value("value", nlohmann::json());
-	switch (write_control(*control, *controls, value)) {
+	nlohmann::json written;
+	switch (write_control(*control, *controls, value, &written)) {
 	case ControlWrite::Invalid:
 		return error(400, "invalid", "The value does not fit this control");
 	case ControlWrite::Unavailable:
@@ -353,7 +354,7 @@ Reply put_control(const std::string &camera, const std::string &control_id, cons
 			return error(status == 403 ? 409 : 400, status == 403 ? "locked" : "invalid",
 				     "The phone refused the value");
 		const ControlState now = control->read(*controls);
-		if (same_value(now.value, value, tolerance) && status != 0)
+		if (same_value(now.value, written, tolerance) && status != 0)
 			return {200, {{"value", now.value}}};
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}

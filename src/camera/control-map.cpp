@@ -773,7 +773,8 @@ const Control *find_control(const std::string &id)
 	return found != map.end() ? &*found : nullptr;
 }
 
-ControlWrite write_control(const Control &control, CameraControls &controls, const nlohmann::json &value)
+ControlWrite write_control(const Control &control, CameraControls &controls, const nlohmann::json &value,
+			   nlohmann::json *written)
 {
 	if (!control.read || !control.write || control.kind == ControlKind::Text)
 		return ControlWrite::Invalid;
@@ -822,7 +823,11 @@ ControlWrite write_control(const Control &control, CameraControls &controls, con
 	case ControlKind::Text:
 		break;
 	}
-	return control.write(controls, checked) ? ControlWrite::Written : ControlWrite::Invalid;
+	if (!control.write(controls, checked))
+		return ControlWrite::Invalid;
+	if (written)
+		*written = checked;
+	return ControlWrite::Written;
 }
 
 } // namespace bmagicam

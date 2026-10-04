@@ -161,7 +161,7 @@ header {
 
 .segmented {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(5.5em, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(4.5em, 1fr));
   gap: 4px;
   background: var(--base);
   border-radius: var(--radius);

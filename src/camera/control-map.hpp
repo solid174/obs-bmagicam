@@ -91,7 +91,8 @@ const Control *find_control(const std::string &id);
 
 enum class ControlWrite { Written, Invalid, Unavailable, Locked };
 // Checks a value against the control's state on the phone and writes it: numbers within the range, stops snapped to
-// the nearest stop, options by their ID, switches as booleans
-ControlWrite write_control(const Control &control, CameraControls &controls, const nlohmann::json &value);
+// the nearest stop, options by their ID, switches as booleans. The value written, after snapping, goes to written.
+ControlWrite write_control(const Control &control, CameraControls &controls, const nlohmann::json &value,
+			   nlohmann::json *written = nullptr);
 
 } // namespace bmagicam
