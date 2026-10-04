@@ -29,11 +29,6 @@ constexpr const char *kAdvanced = "advanced";
 constexpr const char *kSaveStyle = "saveStyle";
 constexpr const char *kDeleteStyle = "deleteStyle";
 constexpr const char *kDefaultStyle = "natural";
-// The advanced sliders' names, in the order of kBeautyKeys
-constexpr std::array<const char *, 7> kValueNames = {"Beautify.Smoothing", "Beautify.Texture", "Beautify.Evening",
-						     "Beautify.Sharpen",   "Beautify.Glow",    "Beautify.MaskSoftness",
-						     "Beautify.DetailSize"};
-
 // Statistics blocks across the picture; down it, as many as its shape gives
 constexpr uint32_t kStatsColumns = 48;
 // Statistics are made every this many frames and read the next time, so reading them never waits for the GPU
@@ -560,10 +555,10 @@ obs_properties_t *beautify_properties(void *data)
 	obs_property_set_modified_callback(advanced, advanced_modified);
 
 	for (size_t index = 0; index < kBeautyKeys.size(); index++) {
-		obs_property_t *value = obs_properties_add_int_slider(properties, kBeautyKeys[index],
-								      obs_module_text(kValueNames[index]), 0, 100, 1);
+		obs_property_t *value = obs_properties_add_int_slider(
+			properties, kBeautyKeys[index], obs_module_text(kBeautyValueNames[index]), 0, 100, 1);
 		obs_property_set_long_description(
-			value, obs_module_text((std::string(kValueNames[index]) + ".Tooltip").c_str()));
+			value, obs_module_text((std::string(kBeautyValueNames[index]) + ".Tooltip").c_str()));
 		obs_property_set_modified_callback(value, value_modified);
 	}
 	obs_property_t *mask =

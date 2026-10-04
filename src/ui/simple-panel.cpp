@@ -3,6 +3,7 @@
 
 #include "panels.hpp"
 
+#include "beauty-panel.hpp"
 #include "microphone-row.hpp"
 #include "widgets/buttons.hpp"
 #include "widgets/ruler.hpp"
@@ -225,6 +226,7 @@ SimplePanel::SimplePanel(PanelContext context, QWidget *parent)
 	};
 	watches_.add({"/lens/opticalImageStabilization"}, [this] { refresh_stabilization(); });
 
+	layout->addWidget(new BeautyPanel(context_, false, this));
 	layout->addWidget(new MicrophoneRow(context_, this));
 	layout->addStretch();
 	refresh({});

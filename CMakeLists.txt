@@ -123,6 +123,10 @@ target_sources(
     src/ui/add-camera-wizard.cpp
     src/ui/add-camera-wizard.hpp
     src/ui/advanced-panel.cpp
+    src/ui/beauty-link.cpp
+    src/ui/beauty-link.hpp
+    src/ui/beauty-panel.cpp
+    src/ui/beauty-panel.hpp
     src/ui/camera-link.cpp
     src/ui/camera-link.hpp
     src/ui/controls-dock.cpp

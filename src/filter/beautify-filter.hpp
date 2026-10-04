@@ -18,6 +18,11 @@ inline constexpr const char *kBeautifyFilterId = "bmagicam_beautify";
 inline constexpr const char *kBeautyStyle = "style";
 inline constexpr const char *kBeautyStrength = "strength";
 inline constexpr const char *kBeautyShowMask = "showMask";
+// The advanced values' names in the locale files, in the order of kBeautyKeys; their tooltips add ".Tooltip"
+inline constexpr std::array<const char *, 7> kBeautyValueNames = {"Beautify.Smoothing", "Beautify.Texture",
+								  "Beautify.Evening",   "Beautify.Sharpen",
+								  "Beautify.Glow",      "Beautify.MaskSoftness",
+								  "Beautify.DetailSize"};
 // The style of values that are no saved style
 inline constexpr const char *kCustomStyle = "custom";
 inline constexpr int kDefaultBeautyStrength = 50;

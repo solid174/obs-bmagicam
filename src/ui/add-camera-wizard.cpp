@@ -7,6 +7,8 @@
 #include "frontend.hpp"
 #include "setup-guide.hpp"
 #include "../camera/look-library.hpp"
+#include "../filter/beautify-filter.hpp"
+#include "../filter/style-library.hpp"
 #include "../camera/stream-presets.hpp"
 #include "../discovery/phone-browser.hpp"
 #include "../source/camera-source.hpp"
@@ -244,6 +246,16 @@ public:
 		looks_->setCurrentIndex(looks_->findData(QStringLiteral("natural")));
 		looks_->setToolTip(text("Dock.Look.Tooltip"));
 
+		// Off unless a style is chosen (ONE-1)
+		beauty_ = new QComboBox(this);
+		beauty_->addItem(text("Wizard.Picture.Beauty.None"), QString());
+		for (const BeautyStyle &style : all_styles()) {
+			const QString name = style.builtin ? text(("Beautify.Style." + style.id).c_str())
+							   : QString::fromStdString(style.id);
+			beauty_->addItem(name, QString::fromStdString(style.id));
+		}
+		beauty_->setToolTip(text("Wizard.Picture.Beauty.Tooltip"));
+
 		set_up_ = new QCheckBox(text("Wizard.Picture.SetUp"), this);
 		set_up_->setChecked(true);
 		set_up_->setToolTip(text("Dock.SetUp.Tooltip"));
@@ -251,6 +263,7 @@ public:
 		auto layout = new QFormLayout(this);
 		layout->addRow(text("Camera.Preset"), presets_);
 		layout->addRow(text("Camera.Look"), looks_);
+		layout->addRow(text("Wizard.Picture.Beauty"), beauty_);
 		layout->addRow(set_up_);
 		setFinalPage(true);
 	}
@@ -261,6 +274,7 @@ public:
 	{
 		wizard_->choice.preset = presets_->currentData().toString().toStdString();
 		wizard_->choice.look = looks_->currentData().toString().toStdString();
+		wizard_->choice.beauty = beauty_->currentData().toString().toStdString();
 		wizard_->choice.set_up = set_up_->isChecked();
 		return true;
 	}
@@ -269,6 +283,7 @@ private:
 	AddCameraWizard *wizard_;
 	QComboBox *presets_;
 	QComboBox *looks_;
+	QComboBox *beauty_;
 	QCheckBox *set_up_;
 };
 
@@ -317,6 +332,10 @@ void AddCameraWizard::accept()
 		OBSSourceAutoRelease camera = obs_source_create(kCameraSourceId, name.c_str(), settings, nullptr);
 		obs_sceneitem_t *item = obs_scene_add(scene, camera);
 		added = OBSGetWeakRef(camera);
+		if (!choice.beauty.empty()) {
+			OBSSourceAutoRelease filter =
+				add_beautify_filter(camera, choice.beauty, kDefaultBeautyStrength);
+		}
 
 		// Fitted to the canvas
 		obs_video_info video = {};

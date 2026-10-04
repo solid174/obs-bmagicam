@@ -52,6 +52,13 @@ Row::Row(const QString &title, const QString &tooltip, QWidget *parent) : QWidge
 	layout_->addLayout(header_);
 }
 
+void Row::add_leading(QWidget *widget)
+{
+	if (widget->toolTip().isEmpty())
+		widget->setToolTip(tooltip_);
+	header_->insertWidget(0, widget);
+}
+
 void Row::add_extra(QWidget *widget)
 {
 	if (widget->toolTip().isEmpty())

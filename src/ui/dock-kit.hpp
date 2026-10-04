@@ -45,6 +45,8 @@ class Row : public QWidget {
 public:
 	Row(const QString &title, const QString &tooltip, QWidget *parent = nullptr);
 
+	// A widget before the title, such as an icon
+	void add_leading(QWidget *widget);
 	void add_extra(QWidget *widget);
 	void set_control(QWidget *control);
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 solid174
 
+#include "beauty-panel.hpp"
 #include "panels.hpp"
 
 #include "microphone-row.hpp"
@@ -197,6 +198,7 @@ AdvancedPanel::AdvancedPanel(PanelContext context, QWidget *parent)
 	auto tabs = new Pages(this);
 	const std::pair<const char *, QWidget *> groups[] = {{"Dock.Tab.Color", color_tab()},
 							     {"Dock.Tab.Focus", focus_tab()},
+							     {"Dock.Tab.Beauty", new BeautyPanel(context_, true)},
 							     {"Dock.Tab.Audio", audio_tab()},
 							     {"Dock.Tab.Phone", phone_tab()}};
 	for (const auto &[label, page] : groups) {

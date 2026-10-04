@@ -22,6 +22,8 @@ public:
 		std::string address;
 		std::string preset;
 		std::string look;
+		// A Beautify style to attach the filter with; empty for none
+		std::string beauty;
 		// Set up for streaming once the phone is connected (CTL-8)
 		bool set_up = true;
 	};
