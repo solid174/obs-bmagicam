@@ -903,7 +903,8 @@ QWidget *AdvancedPanel::focus_tab()
 	layout->addWidget(mode_row);
 
 	auto position_row = new Row(text("Dock.Focus.Position"), text("Dock.Focus.Position.Tooltip"), page);
-	Ruler *position = number_ruler("/lens/focus", "normalized", 0, [](double value) {
+	// The phone takes the focus distance as "normalised" only (docs/camera-api.md, V-10)
+	Ruler *position = number_ruler("/lens/focus", "normalised", 0, [](double value) {
 		return QStringLiteral("%1 %").arg(std::lround(value * 100));
 	});
 	position->setObjectName("focusPosition");

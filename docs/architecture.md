@@ -341,8 +341,8 @@ To settle in development, in the milestone named:
 | V-6 | What a saved phone preset contains (color, lens, phone screen, format) | M2 |
 | V-7 | The other `/access/status` values. Known: the switch is Settings → Network Access → HTTP Server → Enable HTTP Server, and with Settings → Remote Camera Control → Camera Available for set to "Control and Monitor" the API reported `control-and-monitor` | M1 |
 | V-8 | Several controllers at once; meaning of the TXT key `connected device` | M1 |
-| V-9 | Units of `shutterAngle` on PUT | M2 |
-| V-10 | Writing `normalized` instead of `normalised` on lens endpoints | M2 |
+| V-9 | Units of `shutterAngle` on PUT. Not needed in 1.0: the dock always writes `shutterSpeed` and converts a reported angle | M2 |
+| V-10 | Writing `normalized` instead of `normalised` on lens endpoints. Answered: the phone refuses `normalized` on `/lens/focus` (500) and takes `normalised` ([camera-api.md](camera-api.md#quirks)) | M2 |
 | V-11 | Does the phone hold SRT latency at 120 ms or more regardless of the PC's setting? | M1 |
 | V-12 | macOS Local Network permission for OBS: OBS 32.2.2 has no `NSLocalNetworkUsageDescription`. Does the prompt appear, and do Bonjour and outgoing connections work from inside OBS? Partly answered: Bonjour, the phone's API and the stream all worked inside OBS 32.2.2 on macOS 27 (2026-10-04); whether a prompt appears on first use was not seen | M1 |
 | V-13 | Which parameters auto exposure drives (`type`), and whether face-tracking autofocus exists on the back cameras | M2 |

@@ -51,7 +51,7 @@ const std::vector<Setting> &settings()
 		{"/video/whiteBalance", {"whiteBalance"}},
 		{"/video/whiteBalanceTint", {"whiteBalanceTint"}},
 		{"/lens/focus/autoFocus", {"enabled", "mode"}},
-		{"/lens/focus", {"normalized", "normalised"}},
+		{"/lens/focus", {"normalised"}},
 		{"/lens/opticalImageStabilization", {"enabled"}},
 		{"/colorCorrection/lift", {"red", "green", "blue", "luma"}},
 		{"/colorCorrection/gamma", {"red", "green", "blue", "luma"}},
@@ -114,7 +114,7 @@ nlohmann::json writable(const Setting &setting, const nlohmann::json &value)
 	nlohmann::json body = nlohmann::json::object();
 	for (const char *field : setting.fields) {
 		if (value.is_object() && value.contains(field))
-			body[std::string(field) == "normalised" ? "normalized" : field] = value[field];
+			body[field] = value[field];
 	}
 	return body;
 }

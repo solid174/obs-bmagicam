@@ -138,9 +138,9 @@ Not supported on iPhone (404): `/video/gain`, `/video/supportedGains`, `/video/n
 | `GET/PUT /lens/cameras/auto` | `enabled`, `supported` | `supported: false` |
 | `GET/PUT /lens/zoom` | `focalLength`, `normalized`; relative `adjustmentFocalLength`, `adjustmentNormalized` | 19 mm, 0 |
 | `GET /lens/zoom/description` | `controllable`, `focalLength.min/max` | 19–570 mm (digital zoom beyond the lens) |
-| `GET/PUT /lens/focus` | `normalized` (0–1) | 0.47 |
+| `GET/PUT /lens/focus` | `normalised` (0–1); written as `normalised` only | 0.47 |
 | `GET /lens/focus/description` | `controllable`, `capabilities.autoFocus` | controllable |
-| `GET/PUT /lens/focus/autoFocus` | `enabled`, `mode`, read-only `state`, `errors[]` | `{"enabled":true,"mode":"Continuous","state":"Idle"}` |
+| `GET/PUT /lens/focus/autoFocus` | `enabled`, `mode`, read-only `state`, `errors[]`. `enabled: false` is manual focus | `{"enabled":true,"mode":"Continuous","state":"Idle"}` |
 | `GET /lens/focus/autoFocus/description` | `supportedModes[]` | `OneShot`, `Continuous` (the spec also has `TrackObject`, `TrackFace`) |
 | `GET/PUT /lens/focus/autoFocus/target` | `x`, `y`, optional `width`, `height` (0–1) | 0.5, 0.5 |
 | `PUT /lens/focus/autoFocus/retrigger` | — | Refocus |
@@ -362,7 +362,7 @@ What this means:
 - Bonjour advertises `_http._tcp`, but the server is HTTPS only.
 - Every response closes the connection, so there is no keep-alive and every request costs a TLS handshake.
 - iPhone answers 404, not 501, for most unsupported features.
-- Responses contain `normalised` (deprecated) and sometimes also `normalized`. Read both and write `normalized` (V-10).
+- Responses contain `normalised` and sometimes also `normalized`. Writes must use `normalised`: on `/lens/focus`, `{"normalized": 0.25}` answered 500 ("The data couldn't be read because it is missing") and `{"normalised": 0.75}` 204 (V-10, 2026-10-04). The spec calls `normalised` deprecated all the same.
 - The spec defines `shutterAngle` as degrees × 100 (18000 = 180°), but `/video/supportedShutters` returned plain degrees (172.8, 360). Check what PUT expects before using angles (V-9).
 - `/monitoring/display` lists `Device`, while WebSocket property names use `LCD` and `HDMI`.
 - Livestream start and stop answer `200 true`, not `204`.

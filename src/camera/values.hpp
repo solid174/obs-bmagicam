@@ -16,7 +16,8 @@ std::string string_at(const nlohmann::json &object, const char *key);
 bool bool_at(const nlohmann::json &object, const char *key, bool fallback = false);
 std::vector<double> numbers_at(const nlohmann::json &object, const char *key);
 std::vector<std::string> strings_at(const nlohmann::json &object, const char *key);
-// The "normalized" field, which the phone also sends under its older name "normalised" (docs/camera-api.md, Quirks)
+// The "normalised" field, which some answers also carry as "normalized"; writes must use "normalised"
+// (docs/camera-api.md, Quirks)
 double normalized_at(const nlohmann::json &object, double fallback = 0);
 
 } // namespace bmagicam
