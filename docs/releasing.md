@@ -92,7 +92,7 @@ Run on the release candidate packages, installed from the draft release on clean
 | Lip sync | Clap test in an OBS recording at the start and after two hours: audio within 40 ms ahead and 60 ms behind the picture; again after a reconnect (NFR-6) | All three |
 | Microphone sync | With a USB microphone: Sync while talking, then a clap test in a recording: the microphone within 40 ms ahead and 60 ms behind the iPhone's picture; Undo restores the offset (SYN-1 to SYN-3) | All three |
 | 4K presets | 4K30 and 4K60 stream for 10 min without drops; the extra delay matches the preset's description | All three |
-| Reconnect | Wi-Fi off and on, app to background and back, phone locked and unlocked: recovers without action (CAM-6) | All three |
+| Reconnect | Wi-Fi off and on, app to background and back, phone locked and unlocked, the stream stopped and started on the phone: recovers without action, and the phone shows no alert (CAM-6) | All three |
 | Hide and show | Stream stops 2 s after hiding and resumes on show (CAM-7) | One |
 | Controls | Every row of the [control map](ui.md#control-map) changes the phone and the preview; changes on the phone appear in OBS (CTL-1 to CTL-3) | One, spot checks on the others |
 | Looks | LOOK-5 on a color chart and real skin, checked on waveform and vectorscope | One |

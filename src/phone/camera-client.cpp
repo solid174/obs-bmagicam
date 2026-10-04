@@ -70,8 +70,9 @@ ApiReply CameraClient::request(Method method, const std::string &path, const std
 
 		ApiReply reply;
 		reply.status = result->status;
-		if (!result->body.empty()) {
-			reply.body = nlohmann::json::parse(result->body, nullptr, false);
+		reply.text = result->body;
+		if (!reply.text.empty()) {
+			reply.body = nlohmann::json::parse(reply.text, nullptr, false);
 			if (reply.body.is_discarded())
 				reply.body = nullptr;
 		}

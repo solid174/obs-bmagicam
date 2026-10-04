@@ -15,6 +15,8 @@ struct ApiReply {
 	int status = 0;
 	// The body as JSON, null when there is none or it is not JSON
 	nlohmann::json body;
+	// The body as it came, for the replies that are not JSON
+	std::string text;
 
 	bool ok() const { return status >= 200 && status < 300; }
 	bool answered() const { return status != 0; }

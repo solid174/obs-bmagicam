@@ -20,13 +20,13 @@ public:
 	class Sink {
 	public:
 		virtual ~Sink() = default;
-		// The phone connected.
+		// The phone's stream arrived: the first packet of a connection.
 		virtual void stream_started() = 0;
 		// A video frame in system memory, at its presentation time (OBS time).
 		virtual void stream_video(const AVFrame &frame, uint64_t timestamp) = 0;
 		// 48 kHz stereo audio, planar float, starting at the timestamp (OBS time).
 		virtual void stream_audio(const float *const planes[2], uint32_t frames, uint64_t timestamp) = 0;
-		// The stream ended.
+		// The stream that started ended.
 		virtual void stream_ended() = 0;
 	};
 

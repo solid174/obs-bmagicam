@@ -70,6 +70,23 @@ std::string url_path_segment(const std::string &text)
 	return encoded;
 }
 
+// Uploads the destination unless the phone has it up to date. An upload under a name the phone already has fails,
+// with an alert on the phone's screen even though the answer is 204, so an outdated copy is deleted first.
+bool upload_destination(const CameraClient &client, const std::string &service, const std::string &platform,
+			const std::string &url)
+{
+	const std::string path = "/livestreams/customPlatforms/" + url_path_segment(platform);
+	const ApiReply stored = client.get(path);
+	if (stored.ok()) {
+		if (streaming_xml_matches(stored.text, url))
+			return true;
+		client.remove(path);
+	}
+	return client
+		.put_xml(std::string("/livestreams/customPlatforms/") + kDestinationFile, streaming_xml(service, url))
+		.ok();
+}
+
 // The phone's own livestream destinations, saved before the session chooses its own, so that they can be given back
 // even after a crash. Kept in the module's config folder, by phone.
 class SavedDestinations {
@@ -156,6 +173,30 @@ bool supports_remote_control(const std::string &version)
 	return major > 3 || (major == 3 && minor >= 4);
 }
 
+// For the log, which is not translated
+const char *problem_text(CameraSession::Problem problem)
+{
+	switch (problem) {
+	case CameraSession::Problem::NotAnswering:
+		return "the phone does not answer";
+	case CameraSession::Problem::MonitorOnly:
+		return "the phone allows monitoring only";
+	case CameraSession::Problem::CannotReach:
+		return "the phone streams, but nothing arrives";
+	case CameraSession::Problem::Unavailable:
+		return "the phone cannot stream now";
+	case CameraSession::Problem::Refused:
+		return "the phone refused a step of the setup";
+	case CameraSession::Problem::Outdated:
+		return "Blackmagic Camera is older than 3.4";
+	case CameraSession::Problem::FFmpeg:
+		return "the FFmpeg in OBS cannot run the receiver";
+	case CameraSession::Problem::None:
+		break;
+	}
+	return "";
+}
+
 } // namespace
 
 struct CameraSession::Core final : StreamReceiver::Sink {
@@ -173,8 +214,8 @@ struct CameraSession::Core final : StreamReceiver::Sink {
 	uint64_t generation = 0;
 	bool active = false;
 	bool ending = false;
+	// A stream from the phone is arriving
 	bool phone_connected = false;
-	bool stream_lost = false;
 	bool phones_changed = false;
 	Status status;
 
@@ -185,6 +226,9 @@ struct CameraSession::Core final : StreamReceiver::Sink {
 	bool phone_streaming = false;
 	bool receiving = false;
 	StreamReceiver::Settings receiving_settings;
+	// Logged once rather than on every retry
+	Problem logged_problem = Problem::None;
+	std::string refused_format;
 
 	void run();
 	// Connects, sets up and runs the stream until it ends. Returns false on a failure, which is tried again.
@@ -203,7 +247,6 @@ struct CameraSession::Core final : StreamReceiver::Sink {
 		{
 			std::lock_guard lock(mutex);
 			phone_connected = true;
-			stream_lost = false;
 		}
 		cv.notify_all();
 	}
@@ -213,7 +256,6 @@ struct CameraSession::Core final : StreamReceiver::Sink {
 		{
 			std::lock_guard lock(mutex);
 			phone_connected = false;
-			stream_lost = true;
 		}
 		cv.notify_all();
 		std::lock_guard lock(output_mutex);
@@ -253,6 +295,12 @@ void CameraSession::Core::set_status(State state, Problem problem, const std::st
 		status.problem = problem;
 		status.detail = detail;
 	}
+	// Each problem once until the camera is live again
+	if (problem != Problem::None && problem != logged_problem)
+		obs_log(LOG_WARNING, "%s%s%s%s", problem_text(problem), detail.empty() ? "" : " (", detail.c_str(),
+			detail.empty() ? "" : ")");
+	if (problem != Problem::None || state == State::Live)
+		logged_problem = problem;
 	notify_output();
 }
 
@@ -379,34 +427,38 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 		receiving_settings = settings.receiver;
 	}
 
-	// Point the phone at the receiver
 	const std::string service = "OBS on " + computer_name();
 	const std::string platform = streaming_platform(service);
 	const std::string url = "srt://" + local_address + ":" + std::to_string(settings.receiver.port);
-	if (!client.put_xml(std::string("/livestreams/customPlatforms/") + kDestinationFile,
-			    streaming_xml(service, url))
-		     .ok()) {
-		set_status(State::Error, Problem::Refused, "destination");
-		return false;
-	}
 
-	// Keep the phone's own destination before choosing this one
-	const ApiReply current = client.get("/livestreams/0/activePlatform");
-	if (current.ok() && string_at(current.body, "platform") != platform)
-		SavedDestinations::save(phone_key, current.body);
+	// Keep the phone's own destination before anything here changes it. Only on the first setup: replacing an
+	// outdated destination can leave the phone on another one.
+	if (changed_phone_key != phone_key) {
+		const ApiReply current = client.get("/livestreams/0/activePlatform");
+		if (current.ok() && string_at(current.body, "platform") != platform)
+			SavedDestinations::save(phone_key, current.body);
+	}
 	changed_phone = address;
 	changed_phone_key = phone_key;
 	changed_platform = platform;
+
+	// Point the phone at the receiver
+	if (!upload_destination(client, service, platform, url)) {
+		set_status(State::Error, Problem::Refused, "destination");
+		return false;
+	}
 
 	// The stream follows the camera's video format, so the preset sets it
 	const StreamPreset &preset = stream_preset(settings.preset);
 	if (string_at(client.get("/system/videoFormat").body, "name") != preset.video_format) {
 		const ApiReply format = client.put("/system/videoFormat", {{"name", preset.video_format}});
-		if (format.ok())
+		if (format.ok()) {
 			wait_for_answer(client);
-		else
+		} else if (refused_format != preset.video_format) {
 			obs_log(LOG_WARNING, "the phone kept its video format instead of %s (%d)", preset.video_format,
 				format.status);
+			refused_format = preset.video_format;
+		}
 	}
 
 	const ApiReply available = client.get("/livestreams/0/available");
@@ -433,7 +485,6 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 	{
 		std::lock_guard lock(mutex);
 		phone_connected = false;
-		stream_lost = false;
 	}
 	if (!client.put("/livestreams/0/start").ok()) {
 		set_status(State::Error, Problem::Refused, "start");
@@ -449,7 +500,8 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 		return false;
 	}
 
-	// Live until the stream breaks, the settings change, the source is hidden or the session ends
+	// Live until the settings change, the source is hidden, the phone does not come back after a break or the session
+	// ends
 	while (!ending) {
 		if (generation != current_generation)
 			break;
@@ -461,17 +513,28 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 			break;
 		}
 
-		if (stream_lost) {
+		if (!phone_connected) {
+			// The phone reconnects by itself, so it is only started again if it stopped. Setting it up again
+			// while it reconnects restarts its stream once more and can leave it connected without sending.
 			lock.unlock();
-			obs_log(LOG_INFO, "the stream broke off; setting it up again");
-			stop_phone_stream(client);
-			return false;
+			obs_log(LOG_INFO, "waiting for the phone to reconnect");
+			set_status(State::Connecting);
+			if (string_at(client.get("/livestreams/0").body, "status") == "Idle")
+				client.put("/livestreams/0/start");
+			lock.lock();
+			if (!cv.wait_for(lock, kConnectWait, [&] { return phone_connected || changed(); })) {
+				lock.unlock();
+				obs_log(LOG_INFO, "the phone did not reconnect; setting it up again");
+				stop_phone_stream(client);
+				return false;
+			}
+			continue;
 		}
 
 		lock.unlock();
 		set_status(State::Live, Problem::None, preset.profile);
 		lock.lock();
-		cv.wait(lock, [&] { return changed() || stream_lost; });
+		cv.wait(lock, [&] { return changed() || !phone_connected; });
 	}
 	lock.unlock();
 

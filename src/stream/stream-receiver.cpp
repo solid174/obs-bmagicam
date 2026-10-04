@@ -21,6 +21,7 @@ extern "C" {
 #include <condition_variable>
 #include <cstdlib>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -45,6 +46,9 @@ constexpr int64_t kLateNs = 8'000'000;
 constexpr int64_t kSkipNs = 50'000'000;
 constexpr uint64_t kStatsIntervalNs = 10'000'000'000;
 constexpr int kMaxLoggedErrors = 5;
+// A connection that sends nothing for this long is closed and the port listens again. The listener takes one
+// connection at a time, and the phone can leave one open without sending on it, for example after a restart.
+constexpr uint64_t kSilenceTimeoutNs = 2'000'000'000;
 
 #if defined(__APPLE__)
 constexpr AVHWDeviceType kHardwareTypes[] = {AV_HWDEVICE_TYPE_VIDEOTOOLBOX};
@@ -100,15 +104,20 @@ private:
 		int64_t pts_ns;
 	};
 
+	// Called by FFmpeg while it waits
 	static int interrupt(void *opaque);
 	static AVPixelFormat get_format(AVCodecContext *context, const AVPixelFormat *formats);
 
 	bool open();
-	void receive();
+	// Returns whether a stream started
+	bool receive();
 	void handle_packet(const AVPacket *packet, uint64_t arrival);
 	AVCodecContext *open_decoder(const AVStream *stream);
 	void use_hardware(AVCodecContext *context);
 
+	// Sends the packet to the decoder and hands every frame it gives back to take
+	void decode(AVCodecContext *codec, const AVPacket *packet, const char *what,
+		    const std::function<void(AVFrame &)> &take);
 	void decode_audio(const AVPacket *packet);
 	void output_audio(const AVFrame *frame);
 
@@ -138,6 +147,11 @@ private:
 	uint64_t audio_samples_ = 0;
 	std::vector<float> audio_buffer_[2];
 
+	// Only used on the receiving thread, by interrupt()
+	int64_t bytes_seen_ = 0;
+	uint64_t silence_start_ = 0;
+	bool silent_ = false;
+
 	bool logged_first_frame_ = false;
 	std::atomic<int> logged_errors_ = 0;
 	uint64_t stats_start_ = 0;
@@ -145,6 +159,7 @@ private:
 	std::atomic<uint32_t> stats_frames_ = 0;
 	std::atomic<uint32_t> stats_late_ = 0;
 	std::atomic<uint32_t> stats_dropped_ = 0;
+	std::atomic<uint32_t> stats_errors_ = 0;
 };
 
 StreamReceiver::Connection::~Connection()
@@ -160,7 +175,21 @@ StreamReceiver::Connection::~Connection()
 
 int StreamReceiver::Connection::interrupt(void *opaque)
 {
-	return static_cast<Connection *>(opaque)->receiver_.stopping_ ? 1 : 0;
+	auto self = static_cast<Connection *>(opaque);
+	if (self->receiver_.stopping_)
+		return 1;
+
+	// Gives up on a connected phone that sends nothing. There is no I/O context until a phone connects.
+	const AVIOContext *io = self->format_ ? self->format_->pb : nullptr;
+	if (!io)
+		return 0;
+	const uint64_t now = self->receiver_.clock_();
+	if (self->silence_start_ == 0 || io->bytes_read != self->bytes_seen_) {
+		self->bytes_seen_ = io->bytes_read;
+		self->silence_start_ = now;
+	}
+	self->silent_ = now - self->silence_start_ >= kSilenceTimeoutNs;
+	return self->silent_ ? 1 : 0;
 }
 
 bool StreamReceiver::Connection::run()
@@ -168,12 +197,11 @@ bool StreamReceiver::Connection::run()
 	if (!open())
 		return false;
 
-	obs_log(LOG_INFO, "phone connected on port %d", receiver_.settings_.port);
-	receiver_.sink_.stream_started();
 	video_thread_ = std::thread(&Connection::video_loop, this);
-	receive();
+	const bool started = receive();
 	stop_video();
-	receiver_.sink_.stream_ended();
+	if (started)
+		receiver_.sink_.stream_ended();
 	return true;
 }
 
@@ -193,16 +221,17 @@ bool StreamReceiver::Connection::open()
 	if (result < 0) {
 		// avformat_open_input has freed the context
 		if (!receiver_.stopping_)
-			obs_log(LOG_WARNING, "cannot listen on port %d: %s", settings.port, error_text(result).c_str());
+			obs_log(LOG_WARNING, "cannot receive on port %d: %s", settings.port,
+				error_text(result).c_str());
 		return false;
 	}
 	return true;
 }
 
-void StreamReceiver::Connection::receive()
+bool StreamReceiver::Connection::receive()
 {
 	AVPacket *packet = av_packet_alloc();
-	stats_start_ = receiver_.clock_();
+	bool started = false;
 
 	int result = 0;
 	while (!receiver_.stopping_) {
@@ -211,6 +240,13 @@ void StreamReceiver::Connection::receive()
 			break;
 
 		const uint64_t arrival = receiver_.clock_();
+		// The stream starts with its first packet, not when the connection is accepted
+		if (!started) {
+			started = true;
+			stats_start_ = arrival;
+			obs_log(LOG_INFO, "phone connected on port %d", receiver_.settings_.port);
+			receiver_.sink_.stream_started();
+		}
 		handle_packet(packet, arrival);
 		av_packet_unref(packet);
 
@@ -219,9 +255,17 @@ void StreamReceiver::Connection::receive()
 	}
 	av_packet_free(&packet);
 
-	if (!receiver_.stopping_)
-		obs_log(LOG_INFO, "stream ended: %s",
-			result == AVERROR_EOF ? "the phone stopped streaming" : error_text(result).c_str());
+	if (receiver_.stopping_)
+		return started;
+	const std::string reason = silent_                 ? "nothing arrived for 2 s"
+				   : result == AVERROR_EOF ? "the phone stopped streaming"
+							   : error_text(result);
+	if (started)
+		obs_log(LOG_INFO, "stream ended: %s", reason.c_str());
+	else
+		obs_log(LOG_INFO, "a connection on port %d sent no stream (%s); listening again",
+			receiver_.settings_.port, reason.c_str());
+	return started;
 }
 
 void StreamReceiver::Connection::handle_packet(const AVPacket *packet, uint64_t arrival)
@@ -336,22 +380,34 @@ AVPixelFormat StreamReceiver::Connection::get_format(AVCodecContext *context, co
 	return AV_PIX_FMT_NONE;
 }
 
+void StreamReceiver::Connection::decode(AVCodecContext *codec, const AVPacket *packet, const char *what,
+					const std::function<void(AVFrame &)> &take)
+{
+	AVFrame *frame = av_frame_alloc();
+	// A decoder that still holds frames, for example after an error, refuses input (EAGAIN) until they are taken
+	// out. It then gets the packet again.
+	for (int attempt = 0; attempt < 2; attempt++) {
+		const int sent = avcodec_send_packet(codec, packet);
+		if (sent < 0 && sent != AVERROR(EAGAIN))
+			log_error(what, sent);
+
+		int result = 0;
+		while ((result = avcodec_receive_frame(codec, frame)) >= 0) {
+			take(*frame);
+			av_frame_unref(frame);
+		}
+		if (result != AVERROR(EAGAIN) && result != AVERROR_EOF)
+			log_error(what, result);
+
+		if (sent != AVERROR(EAGAIN))
+			break;
+	}
+	av_frame_free(&frame);
+}
+
 void StreamReceiver::Connection::decode_audio(const AVPacket *packet)
 {
-	int result = avcodec_send_packet(audio_.codec, packet);
-	if (result < 0) {
-		log_error("cannot decode audio", result);
-		return;
-	}
-
-	AVFrame *frame = av_frame_alloc();
-	while ((result = avcodec_receive_frame(audio_.codec, frame)) >= 0) {
-		output_audio(frame);
-		av_frame_unref(frame);
-	}
-	if (result != AVERROR(EAGAIN) && result != AVERROR_EOF)
-		log_error("cannot decode audio", result);
-	av_frame_free(&frame);
+	decode(audio_.codec, packet, "cannot decode audio", [this](AVFrame &frame) { output_audio(&frame); });
 }
 
 void StreamReceiver::Connection::output_audio(const AVFrame *frame)
@@ -487,35 +543,19 @@ void StreamReceiver::Connection::video_loop()
 
 void StreamReceiver::Connection::decode_video(const AVPacket *packet, std::deque<DecodedFrame> &frames)
 {
-	int result = avcodec_send_packet(video_.codec, packet);
-	if (result < 0) {
-		log_error("cannot decode video", result);
-		return;
-	}
-
-	for (;;) {
+	decode(video_.codec, packet, "cannot decode video", [&](AVFrame &decoded) {
+		const bool hardware = decoded.format == video_.hardware_format;
 		AVFrame *frame = av_frame_alloc();
-		result = avcodec_receive_frame(video_.codec, frame);
-		if (result < 0) {
-			av_frame_free(&frame);
-			if (result != AVERROR(EAGAIN) && result != AVERROR_EOF)
-				log_error("cannot decode video", result);
-			return;
-		}
-
-		const bool hardware = frame->format == video_.hardware_format;
 		if (hardware) {
-			AVFrame *software = av_frame_alloc();
-			result = av_hwframe_transfer_data(software, frame, 0);
-			if (result >= 0)
-				av_frame_copy_props(software, frame);
-			av_frame_free(&frame);
+			const int result = av_hwframe_transfer_data(frame, &decoded, 0);
 			if (result < 0) {
 				log_error("cannot copy a frame from the video decoder", result);
-				av_frame_free(&software);
-				continue;
+				av_frame_free(&frame);
+				return;
 			}
-			frame = software;
+			av_frame_copy_props(frame, &decoded);
+		} else {
+			av_frame_move_ref(frame, &decoded);
 		}
 
 		if (!logged_first_frame_) {
@@ -527,10 +567,10 @@ void StreamReceiver::Connection::decode_video(const AVPacket *packet, std::deque
 		const int64_t pts = frame->best_effort_timestamp;
 		if (pts == AV_NOPTS_VALUE) {
 			av_frame_free(&frame);
-			continue;
+			return;
 		}
 		frames.push_back({frame, to_ns(pts, video_.codec->pkt_timebase)});
-	}
+	});
 }
 
 void StreamReceiver::Connection::stop_video()
@@ -546,6 +586,7 @@ void StreamReceiver::Connection::stop_video()
 
 void StreamReceiver::Connection::log_error(const char *what, int error)
 {
+	stats_errors_++;
 	if (logged_errors_++ < kMaxLoggedErrors)
 		obs_log(LOG_WARNING, "%s: %s", what, error_text(error).c_str());
 }
@@ -553,10 +594,11 @@ void StreamReceiver::Connection::log_error(const char *what, int error)
 void StreamReceiver::Connection::log_stats(uint64_t now)
 {
 	const double seconds = static_cast<double>(now - stats_start_) / 1e9;
-	obs_log(LOG_INFO, "stream: %.1f fps, %.1f Mb/s, %u late and %u dropped frames",
+	const uint32_t errors = stats_errors_.exchange(0);
+	obs_log(LOG_INFO, "stream: %.1f fps, %.1f Mb/s, %u late and %u dropped frames%s",
 		static_cast<double>(stats_frames_.exchange(0)) / seconds,
 		static_cast<double>(stats_bytes_) * 8 / seconds / 1e6, stats_late_.exchange(0),
-		stats_dropped_.exchange(0));
+		stats_dropped_.exchange(0), errors ? (", " + std::to_string(errors) + " errors").c_str() : "");
 	stats_start_ = now;
 	stats_bytes_ = 0;
 }

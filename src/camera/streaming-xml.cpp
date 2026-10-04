@@ -87,4 +87,23 @@ std::string streaming_platform(const std::string &service)
 	return service + " SRT";
 }
 
+bool streaming_xml_matches(const std::string &stored, const std::string &srt_url)
+{
+	if (stored.find("<url>" + escape(srt_url) + "</url>") == std::string::npos)
+		return false;
+
+	for (const StreamPreset &preset : stream_presets()) {
+		const size_t name = stored.find("<name>" + escape(preset.profile) + "</name>");
+		if (name == std::string::npos)
+			return false;
+		// The profile's bitrate comes before the next name
+		const std::string bitrate = "<bitrate>" + std::to_string(preset.bitrate) + "</bitrate>";
+		const size_t found = stored.find("<bitrate>", name);
+		if (found == std::string::npos || found > stored.find("<name>", name + 1) ||
+		    stored.compare(found, bitrate.size(), bitrate) != 0)
+			return false;
+	}
+	return true;
+}
+
 } // namespace bmagicam

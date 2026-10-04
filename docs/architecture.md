@@ -83,13 +83,15 @@ Examples of error texts, mapped from what the session observes:
 
 Activation (CAM-7): the session streams while the source is shown anywhere (program, preview, projector, properties) and stops 2 s after it is hidden everywhere. The delay keeps scene switches between scenes that share the source from restarting the stream. The session also stops the stream on source removal and on OBS exit.
 
-Reconnection (CAM-6): every failure leads back to Searching or Connecting with backoff (0.5, 1, 2, 4 s, then every 5 s). Auto-reconnect only restarts the stream; it does not re-apply camera settings.
+Reconnection (CAM-6): every failure leads back to Searching or Connecting with backoff (0.5, 1, 2, 4 s, then every 5 s). Auto-reconnect only restarts the stream; it does not re-apply camera settings. When a running stream breaks, the phone reconnects by itself, usually within a second, so the session leaves it alone: it starts the stream again only if the phone reports it `Idle`, and sets the phone up again only if no stream arrives within 5 s. Setting the phone up while it reconnects restarts its stream once more, and the phone can then keep a connection open without sending on it ([camera-api.md](camera-api.md#quirks)).
+
+Setup touches the phone only where needed. The phone's own destination is saved on the first setup, before anything changes it. The plugin's destination is uploaded only when the phone lacks it or has an outdated copy (another address or port, or other profiles), which is deleted first: an upload under an existing name fails with an alert on the phone's screen.
 
 ### What the plugin owns and what the phone owns
 
 | Settings | Owner | Applied |
 | --- | --- | --- |
-| Stream: video format, bitrate, destination | The iPhone Camera source (its stream preset) | On every connect and reconnect, because the stream follows the camera's video format |
+| Stream: video format, bitrate, destination | The iPhone Camera source (its stream preset) | On every setup of the stream, because the stream follows the camera's video format. A stream the phone reconnects by itself is left as it is |
 | Color: the look | The iPhone Camera source (look values in the scene collection) | On the first connect in an OBS session, and whenever the user changes it. Color changes made on the phone update the stored values |
 | Exposure, white balance, focus, lens, phone screen, audio | The phone | Only when the user changes them in the dock, the panel or Set up for streaming |
 
@@ -128,11 +130,11 @@ When a session connects:
 
 `StreamReceiver` (`stream/`) receives on FFmpeg, with two threads per connection:
 
-- **Input.** `srt://0.0.0.0:<port>?mode=listener&transtype=live&latency=<µs>` through libavformat, with an interrupt callback for shutdown. No `avformat_find_stream_info`: decoders are created from the stream types in the program map. The first frame follows the first keyframe, which the phone sends every second.
-- **Video.** HEVC or H.264 through libavcodec with hardware decoding (VideoToolbox on macOS, D3D11VA on Windows, VAAPI or CUDA on Linux; software, with slice threads only, when none works). Video waits as compressed packets, about 1.5 MB per second at 12 Mb/s, and is decoded 30 ms before its presentation time, so only a few decoded frames are ever held, however late the audio runs. Frames are copied to system memory (NV12, or P010 for 10-bit) and passed to `obs_source_output_video2` at their presentation time with their color space, range and transfer (SDR, HLG or PQ). At 1080p60 that copy is about 190 MB/s. A frame more than 50 ms overdue is skipped rather than shown late.
+- **Input.** `srt://0.0.0.0:<port>?mode=listener&transtype=live&latency=<µs>` through libavformat, with an interrupt callback for shutdown and for silence: a connection that sends nothing for 2 s is closed. The listener takes one connection at a time, and the phone can leave one open without sending on it. The stream counts as started with its first packet, not when the connection is accepted. No `avformat_find_stream_info`: decoders are created from the stream types in the program map. The first frame follows the first keyframe, which the phone sends every second.
+- **Video.** HEVC or H.264 through libavcodec with hardware decoding (VideoToolbox on macOS, D3D11VA on Windows, VAAPI or CUDA on Linux; software, with slice threads only, when none works). Video waits as compressed packets, about 1.5 MB per second at 12 Mb/s, and is decoded 30 ms before its presentation time, so only a few decoded frames are ever held, however late the audio runs. Frames are copied to system memory (NV12, or P010 for 10-bit) and passed to `obs_source_output_video2` at their presentation time with their color space, range and transfer (SDR, HLG or PQ). At 1080p60 that copy is about 190 MB/s. A frame more than 50 ms overdue is skipped rather than shown late. After a corrupt frame a decoder can refuse input (EAGAIN) until its frames are taken out, so they are always taken out and the packet is sent again; otherwise one corrupt frame stops the video for good.
 - **Audio.** AAC to float planar, 48 kHz stereo, passed to `obs_source_output_audio` as soon as it is decoded.
 - **Timestamps.** One mapping for audio and video; see [Audio and video sync](#audio-and-video-sync).
-- **Reconnect.** End of stream or an error closes the input and listens again immediately. The session meanwhile checks that the phone is still streaming and restarts it if not.
+- **Reconnect.** End of stream, an error or 2 s of silence closes the input and listens again immediately. The session meanwhile checks that the phone is still streaming and restarts it if not.
 - **Check at load.** FFmpeg must have the majors the plugin was built against and receive SRT ([FFmpeg ABI](#ffmpeg-abi)); otherwise the source does not start its receiver.
 - **Stats.** Frames per second, bitrate, late and dropped frames, decode errors, and the phone's reported send-buffer use. Shown in the Advanced status line, in the state tooltip and in the API; Simple mode only raises them when something is wrong.
 
@@ -333,7 +335,7 @@ To settle in development, in the milestone named:
 | V-1 | Video latency glass to glass with the plugin's receiver (NFR-2) | M1 |
 | V-2 | Does a low-latency profile exist in Streaming XML (`lowLatency` appears in the JSON profile schema), and how much does it save? | M1 |
 | V-3 | Stream codec: H.264 when the camera records H.264? Does the profile's `codec` matter? | M1 |
-| V-4 | How to get a portrait stream (vertical mode produced 1920×1080 landscape) | M1 |
+| V-4 | How to get a portrait stream (vertical mode produced 1920×1080 landscape, filling the frame) | M1 |
 | V-5 | What `PUT /presets/active {"preset":"default"}` resets | M2 |
 | V-6 | What a saved phone preset contains (color, lens, phone screen, format) | M2 |
 | V-7 | The other `/access/status` values. Known: the switch is Settings → Network Access → HTTP Server → Enable HTTP Server, and with Settings → Remote Camera Control → Camera Available for set to "Control and Monitor" the API reported `control-and-monitor` | M1 |

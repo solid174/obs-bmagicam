@@ -283,6 +283,8 @@ The phone has no "send video to this computer" call. It streams like it streams 
 
    Answer: 204. The phone stores the destination as **`<service name> SRT`** (here `OBS on STUDIO-PC SRT`), not under the file name. `GET` and `DELETE /livestreams/customPlatforms/{name}` take that name. The file name in the PUT is not used afterwards.
 
+   Uploading again under a name the phone already has fails: the phone shows "Platforms Import Failed … This platform already exists" on its screen, yet answers 204. `GET` returns the stored copy in the phone's own layout (re-indented, with `low-latency`, `key` and `passphrase` added and `codec` and `audio-bitrate` dropped), and 404 when there is none. So the plugin compares the stored URL and profile bitrates and deletes an outdated copy before uploading.
+
 2. Select it:
 
    ```
@@ -290,7 +292,7 @@ The phone has no "send video to this computer" call. It streams like it streams 
    {"platform":"OBS on STUDIO-PC SRT","server":"OBS","quality":"1080p60 High"}
    ```
 
-   Answer: 204. `GET` returns the same plus `"url":"srt://192.168.1.20:9710"`. The bare service name was also accepted as `platform`.
+   Answer: 204. `GET` returns the same plus `"url":"srt://192.168.1.20:9710"`. The bare service name was also accepted as `platform`. Selecting a destination while streaming, even the one already selected, restarts the stream.
 
 3. `GET /livestreams/0/available` returns `{"available":true,"reasons":[]}`. Possible reasons: `not-supported`, `unsupported-format`, `in-playback`, `pending-format-transition`, `unexpected-reason`.
 
@@ -298,7 +300,7 @@ The phone has no "send video to this computer" call. It streams like it streams 
 
 5. While streaming, `GET /livestreams/0` (or the WebSocket) reports `status`, `bitrate`, `duration`, `effectiveVideoFormat` and `cache` (send buffer use in %).
 
-6. `PUT /livestreams/0/stop` answers `200 true`; the status returns to `Idle` at once and the PC's receiver sees end of stream.
+6. `PUT /livestreams/0/stop` answers `200 true`, and the status returns to `Idle` at once. The SRT connection is not always closed: the phone can stop sending and leave it open.
 
 7. To undo: `PUT /livestreams/0/activePlatform` with the previously active destination, then `DELETE /livestreams/customPlatforms/OBS%20on%20STUDIO-PC%20SRT` (204). Both verified.
 
@@ -365,8 +367,12 @@ What this means:
 - `/monitoring/display` lists `Device`, while WebSocket property names use `LCD` and `HDMI`.
 - Livestream start and stop answer `200 true`, not `204`.
 - A custom destination is renamed to `<service name> SRT`, and later calls must use that name.
-- The livestream ignored the profile's `codec` attribute and its resolution: it followed the camera's codec and video format.
+- The livestream ignored the profile's `codec` attribute and its resolution: it followed the camera's codec and video format. In vertical mode it arrived as 1920×1080 landscape, filling the frame, while `effectiveVideoFormat` said `1214x2160p60` (V-4).
 - The server pauses for a few seconds after a video format change.
 - Starting the livestream in vertical mode once switched the camera's video format to `3840x2160p60`, and it stayed so after the stream stopped. The plugin sets the format from the stream preset anyway, and its before snapshot keeps the user's format.
 - The first request after a pause sometimes times out; the next one answers. The client retries.
+- An upload under a destination name the phone already has fails with an alert on the phone's screen, but answers 204.
+- A livestream that breaks reconnects by itself, usually within a second.
+- After a restart (a stop and start, or selecting a destination while streaming), the phone's next SRT connection sometimes carries no media while `/livestreams/0` reports `Streaming` with bitrate 0. One such connection stayed open for about three minutes, so a receiver must close a connection that sends nothing.
+- After the phone reconnected by itself, `/livestreams/0` kept reporting `Connecting` with frozen `duration` and `bitrate` while the stream arrived normally.
 - A request with `Expect: 100-continue` is refused with 400 (`"Expect: 100-continue is not supported"`). HTTP libraries that add it to larger bodies, such as cpp-httplib above 1 KB, must be told not to.
