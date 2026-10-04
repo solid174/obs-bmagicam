@@ -36,7 +36,7 @@ constexpr int kAudioRate = 48000;
 constexpr int64_t kAudioResyncNs = 20'000'000;
 // Smaller ones by stretching or squeezing the audio by at most 0.5 %
 constexpr int kAudioMaxCorrection = kAudioRate / 200;
-// A video packet is decoded this long before its presentation time
+// Video packets are decoded this long before their decode timestamps come due
 constexpr int64_t kDecodeLeadNs = 30'000'000;
 // Safety net for a video thread that stopped keeping up: ten seconds at 60 fps
 constexpr size_t kMaxQueuedPackets = 600;
@@ -68,6 +68,13 @@ std::string error_text(int error)
 int64_t to_ns(int64_t value, AVRational time_base)
 {
 	return av_rescale_q(value, time_base, kNanoseconds);
+}
+
+// When a packet is decoded. Frames that show before a reference frame come after it in the stream (B-frames), so a
+// video packet has to arrive, and is decoded, by its decode timestamp rather than its presentation timestamp.
+int64_t decode_timestamp(const AVPacket *packet)
+{
+	return packet->dts != AV_NOPTS_VALUE ? packet->dts : packet->pts;
 }
 
 } // namespace
@@ -123,7 +130,8 @@ private:
 
 	void video_loop();
 	void decode_video(const AVPacket *packet, std::deque<DecodedFrame> &frames);
-	int64_t video_pts_ns(const AVPacket *packet) const;
+	// OBS time by which the packet is decoded
+	int64_t video_decode_time(const AVPacket *packet) const;
 	void stop_video();
 
 	void log_error(const char *what, int error);
@@ -290,9 +298,11 @@ void StreamReceiver::Connection::handle_packet(const AVPacket *packet, uint64_t 
 
 	{
 		std::lock_guard lock(mutex_);
-		if (packet->pts != AV_NOPTS_VALUE)
+		// Audio is decoded as it arrives; video by its decode timestamps, which lead the presentation ones
+		const int64_t timestamp = video ? decode_timestamp(packet) : packet->pts;
+		if (timestamp != AV_NOPTS_VALUE)
 			clock_.on_packet(video ? MediaClock::Stream::Video : MediaClock::Stream::Audio,
-					 to_ns(packet->pts, stream->time_base), static_cast<int64_t>(arrival));
+					 to_ns(timestamp, stream->time_base), static_cast<int64_t>(arrival));
 		if (video) {
 			if (video_packets_.size() >= kMaxQueuedPackets) {
 				av_packet_free(&video_packets_.front());
@@ -476,9 +486,9 @@ void StreamReceiver::Connection::output_audio(const AVFrame *frame)
 	audio_samples_ += static_cast<uint64_t>(samples);
 }
 
-int64_t StreamReceiver::Connection::video_pts_ns(const AVPacket *packet) const
+int64_t StreamReceiver::Connection::video_decode_time(const AVPacket *packet) const
 {
-	return to_ns(packet->pts, video_.codec->pkt_timebase);
+	return clock_.to_obs(to_ns(decode_timestamp(packet), video_.codec->pkt_timebase)) - kDecodeLeadNs;
 }
 
 void StreamReceiver::Connection::video_loop()
@@ -511,11 +521,11 @@ void StreamReceiver::Connection::video_loop()
 			}
 		}
 
-		// Decode the next packet shortly before it is due
+		// Decode the next packet shortly before its decode time
 		if (!video_packets_.empty()) {
 			AVPacket *packet = video_packets_.front();
-			if (!clock_.settled() || packet->pts == AV_NOPTS_VALUE ||
-			    clock_.to_obs(video_pts_ns(packet)) - kDecodeLeadNs <= now) {
+			if (!clock_.settled() || decode_timestamp(packet) == AV_NOPTS_VALUE ||
+			    video_decode_time(packet) <= now) {
 				video_packets_.pop_front();
 				lock.unlock();
 				decode_video(packet, frames);
@@ -529,7 +539,7 @@ void StreamReceiver::Connection::video_loop()
 		if (!frames.empty())
 			wake = clock_.to_obs(frames.front().pts_ns);
 		if (!video_packets_.empty())
-			wake = std::min(wake, clock_.to_obs(video_pts_ns(video_packets_.front())) - kDecodeLeadNs);
+			wake = std::min(wake, video_decode_time(video_packets_.front()));
 		if (wake == INT64_MAX)
 			video_cv_.wait(lock);
 		else
