@@ -4,7 +4,6 @@
 #include "microphone-row.hpp"
 
 #include "widgets/flow-layout.hpp"
-#include "../source/camera-source.hpp"
 #include "../sync/microphone-sync.hpp"
 
 #include <QComboBox>
@@ -13,7 +12,6 @@
 #include <QVBoxLayout>
 
 #include <cmath>
-#include <cstring>
 #include <vector>
 
 namespace bmagicam::ui {
@@ -22,33 +20,24 @@ namespace {
 
 constexpr int kSourcesCheckMs = 2000;
 
-struct AudioSource {
+struct Microphone {
 	QString name;
 	QString uuid;
-	bool microphone = false;
 };
 
-// OBS's audio sources other than iPhone Cameras; microphones of the computer's first
-std::vector<AudioSource> audio_sources()
+std::vector<Microphone> microphones()
 {
-	std::vector<AudioSource> sources;
+	std::vector<Microphone> found;
 	obs_enum_sources(
 		[](void *param, obs_source_t *source) {
-			if ((obs_source_get_output_flags(source) & OBS_SOURCE_AUDIO) && !is_camera_source(source)) {
-				const char *id = obs_source_get_unversioned_id(source);
-				const size_t length = id ? std::strlen(id) : 0;
-				const bool microphone = length > 13 &&
-							std::strcmp(id + length - 13, "input_capture") == 0;
-				static_cast<std::vector<AudioSource> *>(param)->push_back(
+			if (is_computer_microphone(source))
+				static_cast<std::vector<Microphone> *>(param)->push_back(
 					{QString::fromUtf8(obs_source_get_name(source)),
-					 QString::fromUtf8(obs_source_get_uuid(source)), microphone});
-			}
+					 QString::fromUtf8(obs_source_get_uuid(source))});
 			return true;
 		},
-		&sources);
-	std::stable_sort(sources.begin(), sources.end(),
-			 [](const AudioSource &a, const AudioSource &b) { return a.microphone && !b.microphone; });
-	return sources;
+		&found);
+	return found;
 }
 
 } // namespace
@@ -73,6 +62,11 @@ MicrophoneRow::MicrophoneRow(PanelContext context, QWidget *parent)
 	layout->addWidget(microphones_);
 	layout->addWidget(sync_);
 	layout->addWidget(undo_);
+	// Who needs this row and who does not, without hovering
+	auto hint = new QLabel(text("Dock.Microphone.Hint"), this);
+	hint->setWordWrap(true);
+	set_theme_class(hint, "text-muted");
+	set_control(hint);
 	set_control(controls);
 	result_ = new QLabel(this);
 	result_->setWordWrap(true);
@@ -93,7 +87,7 @@ MicrophoneRow::~MicrophoneRow() = default;
 
 void MicrophoneRow::refresh_sources()
 {
-	const std::vector<AudioSource> sources = audio_sources();
+	const std::vector<Microphone> sources = microphones();
 	const QString chosen = microphones_->currentData().toString();
 	bool same = static_cast<int>(sources.size()) == microphones_->count();
 	for (size_t index = 0; same && index < sources.size(); index++)
@@ -101,7 +95,7 @@ void MicrophoneRow::refresh_sources()
 		       microphones_->itemText(static_cast<int>(index)) == sources[index].name;
 	if (!same) {
 		microphones_->clear();
-		for (const AudioSource &source : sources)
+		for (const Microphone &source : sources)
 			microphones_->addItem(source.name, source.uuid);
 		const int index = microphones_->findData(chosen);
 		microphones_->setCurrentIndex(index >= 0 ? index : 0);

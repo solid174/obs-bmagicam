@@ -71,11 +71,12 @@ The first time OBS talks to the phone, your computer may ask for permission:
 
 ## 6. Sync a computer microphone
 
-A microphone connected to the computer hears you about half a second before the iPhone's picture shows you. The iPhone's own audio is always in sync; if you use a computer microphone instead:
+A microphone connected to the computer hears you about half a second before the iPhone's picture shows you. The iPhone's own audio is always in sync: if you use it, mute the computer's microphone in OBS's Audio Mixer and you are done. If you use a computer microphone instead:
 
-1. In the dock's **Microphone** row, choose the microphone.
-2. Click **Sync** and talk or clap for about 12 seconds, with the iPhone's microphone on in Blackmagic Camera. It may be muted in OBS.
-3. The button shows the delay it set, for example **Synced · 412 ms**, as the microphone's Sync Offset (Advanced Audio Properties). **Undo** puts the previous value back.
+1. Mute the iPhone Camera in the Audio Mixer, so viewers hear you once.
+2. In the dock's **Computer microphone** row, choose the microphone.
+3. Click **Sync** and talk or clap for about 12 seconds, with the iPhone's microphone on in Blackmagic Camera; muted in OBS is fine.
+4. The button shows the delay it set, for example **Synced · 412 ms**, as the microphone's Sync Offset (Advanced Audio Properties). **Undo** puts the previous value back.
 
 If it says it could not measure, nothing changed: talk or clap closer to both microphones and try again.
 

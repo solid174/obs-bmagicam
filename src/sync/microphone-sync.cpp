@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <mutex>
 #include <vector>
 
@@ -36,6 +37,21 @@ constexpr double kClearPeak = 8.0;
 constexpr double kSilence = 0.001;
 
 } // namespace
+
+bool is_computer_microphone(obs_source_t *source)
+{
+	static constexpr char kSuffix[] = "input_capture";
+	constexpr size_t kSuffixLength = sizeof(kSuffix) - 1;
+	const char *id = source ? obs_source_get_unversioned_id(source) : nullptr;
+	const size_t length = id ? std::strlen(id) : 0;
+	return length > kSuffixLength && std::strcmp(id + length - kSuffixLength, kSuffix) == 0;
+}
+
+bool is_audible(obs_source_t *source)
+{
+	return source && obs_source_active(source) && !obs_source_muted(source) &&
+	       obs_source_get_volume(source) > 0.001f;
+}
 
 // What one source was heard to say, in 8 kHz bins from the start time
 struct MicrophoneSync::Capture {

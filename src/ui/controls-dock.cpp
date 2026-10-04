@@ -13,6 +13,7 @@
 #include "../camera/phone-snapshot.hpp"
 #include "../camera/values.hpp"
 #include "../source/camera-source.hpp"
+#include "../sync/microphone-sync.hpp"
 
 #include <obs-module.h>
 #include <util/platform.h>
@@ -442,6 +443,24 @@ void ControlsDock::refresh_state()
 				line = text("Dock.LowBattery").arg(static_cast<int>(level));
 				line_class = "text-warning";
 			}
+		}
+	}
+	// Doubled sound: the iPhone's own sound and a computer microphone that is not synced both reach the mix, so
+	// viewers hear the voice twice, the microphone ahead (SYN-1)
+	if (line.isEmpty() && is_audible(source)) {
+		QString microphone;
+		obs_enum_sources(
+			[](void *param, obs_source_t *candidate) {
+				auto name = static_cast<QString *>(param);
+				if (name->isEmpty() && is_computer_microphone(candidate) && is_audible(candidate) &&
+				    obs_source_get_sync_offset(candidate) == 0)
+					*name = QString::fromUtf8(obs_source_get_name(candidate));
+				return true;
+			},
+			&microphone);
+		if (!microphone.isEmpty()) {
+			line = text("Dock.DoubleSound").arg(microphone);
+			line_class = "text-warning";
 		}
 	}
 	status_line_->setText(line);

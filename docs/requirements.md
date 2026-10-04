@@ -56,7 +56,7 @@ All components ship in one plugin. Source and filter do not depend on each other
 
 ## Microphone sync
 
-- **SYN-1** "Sync microphone" puts a microphone connected to the computer, or any other OBS audio source, in step with the iPhone's picture, so a voice recorded on the computer stays lip-synced with the iPhone's video. The iPhone's own audio needs nothing: it arrives in sync (NFR-6).
+- **SYN-1** "Sync microphone" puts a microphone connected to the computer in step with the iPhone's picture, so a voice recorded on the computer stays lip-synced with the iPhone's video. The iPhone's own audio needs nothing: it arrives in sync (NFR-6). When the iPhone's sound and a computer microphone that is not synced both reach the mix, the dock warns that viewers hear the voice twice.
 - **SYN-2** It measures the delay from sound that both microphones hear while the user talks or claps for a few seconds, without test tones, then sets that source's Sync Offset (the one in OBS's Advanced Audio Properties) and shows the value. Undo puts the previous offset back.
 - **SYN-3** The result is within 10 ms. When it cannot measure, for example in silence or with the iPhone's microphone muted, it says so and changes nothing.
 

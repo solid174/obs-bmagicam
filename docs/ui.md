@@ -108,7 +108,9 @@ The default. Everything a streamer needs, on one page, in everyday words. Each r
 │ (Auto)  [Refocus]                                    │
 │ Stabilize                                            │
 │ [Off]                   On                           │
-│ Microphone                                           │
+│ Computer microphone                                  │
+│ Only for a microphone on this computer. The iPhone's │
+│ own sound always matches its picture.                │
 │ [Mic/Aux                  ▾]  [Sync]                 │
 └──────────────────────────────────────────────────────┘
 ```
@@ -122,9 +124,9 @@ The default. Everything a streamer needs, on one page, in everyday words. Each r
 | Lens | `/lens/cameras/active` | Front, then one button per back lens, labelled the way the iPhone camera labels them (0.5×, 1×, 2×…) |
 | Focus | `/lens/focus/autoFocus` (Continuous or One shot), `/lens/focus/autoFocus/retrigger` | The tooltip mentions clicking the picture in Interact |
 | Stabilize | `/lens/opticalImageStabilization` | Off or On. On from OBS is Standard; Cinematic and Extreme are chosen on the phone and show as On (STB-2) |
-| Microphone | the microphone's Sync Offset | Only when OBS has an audio source other than iPhone Cameras: picks it (the computer's microphones first) and syncs it to the picture (SYN-1). The button turns into "Synced · 412 ms" with Undo |
+| Computer microphone | the microphone's Sync Offset | Only when OBS has a microphone of the computer's, an audio input capture; screen, browser and video sources do not hear the room and are not offered. Picks it and syncs it to the picture (SYN-1); a line under the label says that the iPhone's own sound needs nothing. The button turns into "Synced · 412 ms" with Undo. When the iPhone's sound and a computer microphone that is not synced are both audible, the status line says that viewers hear the voice twice, and how to fix it |
 
-Beauty joins the rows in 1.1. Zoom, the color sliders and everything else stay in Advanced. A status line appears under the rows only when there is something to say: a short message after an action, or a warning such as "Phone battery at 15 %. Connect a charger."
+Beauty joins the rows in 1.1. Zoom, the color sliders and everything else stay in Advanced. A status line appears under the rows only when there is something to say: a short message after an action, or a warning such as "Phone battery at 15 %. Connect a charger." or "Viewers hear you twice: the iPhone's sound and Mic/Aux are both on, and Mic/Aux runs ahead of the picture. Mute one in the Audio Mixer, or Sync Mic/Aux."
 
 ### Advanced mode
 

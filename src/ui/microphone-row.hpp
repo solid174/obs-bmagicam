@@ -19,9 +19,9 @@ class MicrophoneSync;
 
 namespace bmagicam::ui {
 
-// The Microphone row (SYN-1, docs/ui.md): picks a microphone of the computer's, or another OBS audio source, and puts
-// it in step with the iPhone's picture. Undo puts the previous Sync Offset back (SYN-2). Shown only when OBS has such
-// a source.
+// The Computer microphone row (SYN-1, docs/ui.md): picks a microphone of the computer's and puts it in step with the
+// iPhone's picture. The iPhone's own sound needs nothing. Undo puts the previous Sync Offset back (SYN-2). Shown only
+// when OBS has such a microphone.
 class MicrophoneRow : public Row {
 public:
 	MicrophoneRow(PanelContext context, QWidget *parent = nullptr);

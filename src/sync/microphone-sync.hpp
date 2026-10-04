@@ -11,6 +11,12 @@
 
 namespace bmagicam {
 
+// Whether the source is a microphone of the computer's: one of OBS's audio input captures (CoreAudio, WASAPI,
+// PulseAudio, ALSA). Screen, browser and video sources do not hear the room, so there is nothing to sync them by.
+bool is_computer_microphone(obs_source_t *source);
+// Whether the source reaches the mix now: active, not muted and not turned all the way down
+bool is_audible(obs_source_t *source);
+
 // Sync microphone (SYN-1 to SYN-3, docs/architecture.md, "Microphone sync"): listens to the iPhone Camera and a
 // microphone of the computer's while the user talks or claps, and finds how much later the iPhone carries the same
 // sound. Both sources are heard with their own timestamps, before any Sync Offset, so measuring again gives the same

@@ -10,7 +10,7 @@ The first release.
 - **Camera Controls dock.** Simple mode: Set up for streaming, looks, brightness, warmth, lens, focus, stabilization and the microphone. Advanced mode: a histogram, the camera's tiles with rulers for lens and zoom, shutter, iris, ISO, white balance and tint, the stream preset, color with the wheels, focus modes and distance, the phone's audio inputs, recording on the phone, dynamic range and recording codec, and the phone screen's tools. Changes show in the preview while you drag, changes made on the phone show in OBS, and every control explains itself in its tooltip. Follows the OBS theme.
 - **Looks:** Natural, Studio, Warm, Vivid, Soft and Cinematic, applied by the phone before compression, and looks of your own.
 - **Set up for streaming:** a flicker-free shutter, exposure and white balance measured once and held, continuous focus.
-- **Microphone sync:** measures how far a computer microphone runs ahead of the iPhone's picture from your voice, sets its Sync Offset, and undoes it on request.
+- **Microphone sync:** measures how far a computer microphone runs ahead of the iPhone's picture from your voice, sets its Sync Offset, and undoes it on request. The dock warns when viewers would hear you twice, from the iPhone and from an unsynced computer microphone.
 - **Safe to try:** Reset to camera defaults, Restore my settings (the phone as it was before the plugin first changed it, also saved on the phone as a preset), and the phone's own presets.
 - **Add iPhone Camera** wizard with the phone steps in pictures.
 - English and Russian.
