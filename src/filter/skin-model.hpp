@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 namespace bmagicam {
@@ -17,6 +18,10 @@ struct BlockStats {
 	// Mean small-scale luma detail of the block's mid-tones; negative when it has none
 	float detail = -1;
 };
+
+// A half-precision float as the GPU writes it (IEEE 754 binary16), as a float. The statistics come back as half
+// floats because every renderer can read those back; Metal cannot read back 32-bit float textures.
+float from_half(uint16_t bits);
 
 // The skin color and the camera's noise, learned from the picture and followed slowly, so the skin mask holds for
 // every skin tone and white balance, and edge thresholds give the same result at low and high ISO.

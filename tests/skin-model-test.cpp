@@ -9,6 +9,18 @@
 
 using namespace bmagicam;
 
+TEST_CASE("half floats from the GPU read back exactly")
+{
+	CHECK(from_half(0x0000) == 0.0f);
+	CHECK(from_half(0x3c00) == 1.0f);
+	CHECK(from_half(0xbc00) == -1.0f);
+	CHECK(from_half(0x3800) == 0.5f);
+	CHECK(from_half(0x2e66) == doctest::Approx(0.1).epsilon(0.001));
+	CHECK(from_half(0x0001) == doctest::Approx(5.9604645e-8));
+	CHECK(from_half(0x7bff) == 65504.0f);
+	CHECK(std::isinf(from_half(0x7c00)));
+}
+
 TEST_CASE("the skin color follows the skin in the picture")
 {
 	SkinModel model;

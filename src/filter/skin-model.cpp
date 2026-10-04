@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace bmagicam {
 
@@ -37,6 +38,30 @@ float squared(float value)
 }
 
 } // namespace
+
+float from_half(uint16_t bits)
+{
+	const uint32_t sign = static_cast<uint32_t>(bits & 0x8000u) << 16;
+	uint32_t exponent = (bits >> 10) & 0x1fu;
+	uint32_t mantissa = bits & 0x3ffu;
+	uint32_t result = sign;
+	if (exponent == 0x1fu) {
+		result |= 0x7f800000u | (mantissa << 13);
+	} else if (exponent != 0) {
+		result |= ((exponent + 112) << 23) | (mantissa << 13);
+	} else if (mantissa != 0) {
+		// Subnormal: normalized for the float's wider exponent
+		exponent = 113;
+		while (!(mantissa & 0x400u)) {
+			mantissa <<= 1;
+			exponent--;
+		}
+		result |= (exponent << 23) | ((mantissa & 0x3ffu) << 13);
+	}
+	float value;
+	std::memcpy(&value, &result, sizeof(value));
+	return value;
+}
 
 void SkinModel::reset()
 {

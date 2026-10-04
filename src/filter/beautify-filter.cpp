@@ -156,7 +156,7 @@ BeautifyFilter::BeautifyFilter(obs_source_t *context, obs_data_t *settings) : co
 	coefficients_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	wide_half_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	wide_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
-	stats_ = gs_texrender_create(GS_RGBA32F, GS_ZS_NONE);
+	stats_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	obs_leave_graphics();
 	bfree(path);
 	update(settings);
@@ -358,7 +358,7 @@ void BeautifyFilter::measure(gs_texture_t *half, gs_texture_t *quarter, uint32_t
 	pass(stats_, "Stats", columns, rows, {{params_.image, half}, {params_.image2, quarter}});
 	if (!stage_ || gs_stagesurface_get_width(stage_) != columns || gs_stagesurface_get_height(stage_) != rows) {
 		gs_stagesurface_destroy(stage_);
-		stage_ = gs_stagesurface_create(columns, rows, GS_RGBA32F);
+		stage_ = gs_stagesurface_create(columns, rows, GS_RGBA16F);
 	}
 	if (stage_) {
 		gs_stage_texture(stage_, gs_texrender_get_texture(stats_));
@@ -380,9 +380,10 @@ void BeautifyFilter::read_stats()
 	std::vector<BlockStats> blocks;
 	blocks.reserve(static_cast<size_t>(columns) * rows);
 	for (uint32_t y = 0; y < rows; y++) {
-		const auto row = reinterpret_cast<const float *>(data + static_cast<size_t>(y) * linesize);
+		const auto row = reinterpret_cast<const uint16_t *>(data + static_cast<size_t>(y) * linesize);
 		for (uint32_t x = 0; x < columns; x++)
-			blocks.push_back({row[4 * x], row[4 * x + 1], row[4 * x + 2], row[4 * x + 3]});
+			blocks.push_back({from_half(row[4 * x]), from_half(row[4 * x + 1]), from_half(row[4 * x + 2]),
+					  from_half(row[4 * x + 3])});
 	}
 	gs_stagesurface_unmap(stage_);
 	model_.update(blocks, 1.0f - std::exp(-stats_seconds_ / kModelSeconds));
