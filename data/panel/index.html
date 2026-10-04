@@ -1,1 +1,35 @@
-<!doctype html><title>iPhone Camera</title>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>iPhone Camera</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<main id="app">
+  <section id="signin" hidden>
+    <h1 data-text="Panel.Title">iPhone Camera</h1>
+    <p data-text="Panel.SignIn.Prompt"></p>
+    <form id="signin-form">
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button type="submit" class="primary" data-text="Panel.SignIn">Sign in</button>
+    </form>
+    <p id="signin-error" class="error" hidden></p>
+  </section>
+  <section id="panel" hidden>
+    <header>
+      <select id="camera-picker" hidden></select>
+      <div class="header-row">
+        <div id="mode" class="segmented compact"></div>
+      </div>
+      <p id="camera-state" class="state"></p>
+    </header>
+    <div id="content"></div>
+  </section>
+  <p id="status" class="status" hidden></p>
+</main>
+<script src="panel.js"></script>
+</body>
+</html>

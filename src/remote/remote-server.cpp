@@ -177,6 +177,8 @@ struct Server::Running {
 
 		http.Get("/api/v1/beautify", plain(beautify));
 		http.Get("/api/v1/beautify/styles", plain(styles));
+		http.Post("/api/v1/beautify",
+			  api([](const httplib::Request &, const nlohmann::json &body) { return add_beautify(body); }));
 		http.Put(R"(/api/v1/beautify/([^/]+)/(.+))",
 			 api([](const httplib::Request &request, const nlohmann::json &body) {
 				 return put_beautify(request.matches[1], request.matches[2], body);
@@ -287,6 +289,8 @@ struct Server::Running {
 			reply = put_look(camera, request);
 		else if (op == "stream")
 			reply = put_stream(camera, request);
+		else if (op == "addBeauty")
+			reply = add_beautify(request);
 		else if (op == "beautify")
 			reply = put_beautify(request.value("source", std::string()),
 					     request.value("filter", std::string()),

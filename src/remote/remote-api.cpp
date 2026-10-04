@@ -627,4 +627,18 @@ Reply put_beautify(const std::string &source_id, const std::string &filter_name,
 	return {200, beautify_filter(source, filter)};
 }
 
+Reply add_beautify(const nlohmann::json &body)
+{
+	const std::string id = body.is_object() ? body.value("source", std::string()) : std::string();
+	OBSSourceAutoRelease source = obs_get_source_by_uuid(id.c_str());
+	if (!source || !(obs_source_get_output_flags(source) & OBS_SOURCE_VIDEO))
+		return error(404, "not_found", "No video source with this ID");
+	if (OBSSourceAutoRelease existing = find_beautify_filter(source))
+		return error(409, "exists", "The source has a Beautify filter");
+	OBSSourceAutoRelease filter = add_beautify_filter(source, "natural", kDefaultBeautyStrength);
+	if (!filter)
+		return error(500, "failed", "The filter could not be added");
+	return {201, beautify_filter(source, filter)};
+}
+
 } // namespace bmagicam::remote

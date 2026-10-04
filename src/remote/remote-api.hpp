@@ -60,6 +60,8 @@ nlohmann::json beautify();
 nlohmann::json beautify_filter(obs_source_t *source, obs_source_t *filter);
 nlohmann::json styles();
 Reply put_beautify(const std::string &source, const std::string &filter, const nlohmann::json &body);
+// Adds a Beautify filter with the default style to a source that has none, as the dock's Add Beauty does
+Reply add_beautify(const nlohmann::json &body);
 
 } // namespace remote
 } // namespace bmagicam
