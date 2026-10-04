@@ -108,6 +108,10 @@ The default. Everything a streamer needs, on one page, in everyday words. Each r
 │ (Auto)  [Refocus]                                    │
 │ Stabilize                                            │
 │ [Off]                   On                           │
+│ ✦ Beauty                                      (On)   │
+│ [Natural]       Soft            Glam                 │
+│ ┆ · · · ┆ · · · ┆ · · ┃ ┆ · · · ┆ · · · ┆            │
+│ off                                          full    │
 │ Computer microphone                                  │
 │ Only for a microphone on this computer. The iPhone's │
 │ own sound always matches its picture.                │
@@ -124,9 +128,10 @@ The default. Everything a streamer needs, on one page, in everyday words. Each r
 | Lens | `/lens/cameras/active` | Front, then one button per back lens, labelled the way the iPhone camera labels them (0.5×, 1×, 2×…) |
 | Focus | `/lens/focus/autoFocus` (Continuous or One shot), `/lens/focus/autoFocus/retrigger` | The tooltip mentions clicking the picture in Interact |
 | Stabilize | `/lens/opticalImageStabilization` | Off or On. On from OBS is Standard; Cinematic and Extreme are chosen on the phone and show as On (STB-2) |
+| Beauty | the source's Beautify filter, not the phone | A magic-wand icon (✦ above), On, the styles as buttons and the Beauty slider from off to full (BEA-2, BEA-3). Without a Beautify filter on the source the row shows Add Beauty, which adds one with Natural at 50. Follows changes made in the filter's properties or anywhere else |
 | Computer microphone | the microphone's Sync Offset | Only when OBS has a microphone of the computer's, an audio input capture; screen, browser and video sources do not hear the room and are not offered. Picks it and syncs it to the picture (SYN-1); a line under the label says that the iPhone's own sound needs nothing. The button turns into "Synced · 412 ms" with Undo. When the iPhone's sound and a computer microphone that is not synced are both audible, the status line says that viewers hear the voice twice, and how to fix it |
 
-Beauty joins the rows in 1.1. Zoom, the color sliders and everything else stay in Advanced. A status line appears under the rows only when there is something to say: a short message after an action, or a warning such as "Phone battery at 15 %. Connect a charger." or "Viewers hear you twice: the iPhone's sound and Mic/Aux are both on, and Mic/Aux runs ahead of the picture. Mute one in the Audio Mixer, or Sync Mic/Aux."
+Zoom, the color sliders and everything else stay in Advanced. A status line appears under the rows only when there is something to say: a short message after an action, or a warning such as "Phone battery at 15 %. Connect a charger." or "Viewers hear you twice: the iPhone's sound and Mic/Aux are both on, and Mic/Aux runs ahead of the picture. Mute one in the Audio Mixer, or Sync Mic/Aux."
 
 ### Advanced mode
 
@@ -151,7 +156,7 @@ Every control in the [control map](#control-map). The top is the app's own layou
 │                 ┌───────┐                            │
 │                 │ 24 mm │                            │
 │ ┆ · · · · ┆ · · ┃ · · ┆ · · · · ┆ · · · · ┆          │
-│ [Color] Focus  Audio  Phone                          │
+│ [Color] Focus  Beauty  Audio  Phone                  │
 │ Saturation                                           │
 │            ┌──────┐                                  │
 │            │ 1.12 │                                  │
@@ -268,13 +273,13 @@ Every setting the app offers over its API, with the ID used by the dock, the web
 
 ### Beauty (1.1)
 
-These drive the Beautify filter on the selected source, so they work in OBS, not on the phone.
+These drive the Beautify filter on the selected source, so they work in OBS, not on the phone. Simple mode has the first three in its Beauty row; Advanced mode has all of them in its Beauty tab.
 
 | Control | ID | Widget | Range | Mode |
 | --- | --- | --- | --- | --- |
-| Beauty on | `beauty.enabled` | Switch | — | Simple (with Add Beauty when the source has no filter) |
-| Style | `beauty.style` | Choice: Natural, Soft, Glam, the user's styles | — | Simple |
-| Beauty | `beauty.strength` | Continuous, magic-wand icon | 0–100; 0 is off | Simple |
+| Beauty on | `beauty.enabled` | Chip in the row's header; Add Beauty when the source has no filter | — | Simple |
+| Style | `beauty.style` | Buttons: Natural, Soft, Glam, the user's styles; none selected for Custom | — | Simple |
+| Beauty | `beauty.strength` | Ruler, magic-wand icon; numbers in Advanced | 0–100; 0 is off | Simple |
 | Smoothing | `beauty.smoothing` | Continuous | 0–100 | Advanced |
 | Texture | `beauty.texture` | Continuous | 0–100 | Advanced |
 | Tone evening | `beauty.evening` | Continuous | 0–100 | Advanced |
@@ -282,8 +287,9 @@ These drive the Beautify filter on the selected source, so they work in OBS, not
 | Glow | `beauty.glow` | Continuous | 0–100 | Advanced |
 | Mask softness | `beauty.maskSoftness` | Continuous | 0–100 | Advanced |
 | Detail size | `beauty.detailSize` | Continuous | 0–100 | Advanced |
-| Show mask | `beauty.showMask` | Switch | — | Advanced |
-| Save as style | `beauty.saveStyle` | Action | — | Advanced |
+| Show mask | `beauty.showMask` | Chip | — | Advanced |
+| Save as style | `beauty.saveStyle` | Action: asks for a name; the built-in styles' names are taken | — | Advanced |
+| Delete style | `beauty.deleteStyle` | Action, for the user's styles; filters keep their values | — | Advanced |
 
 ### Phone
 
@@ -369,7 +375,7 @@ A `QWizard`, like OBS's own Auto-Configuration Wizard.
 
    At the bottom the page shows a live "Looking for phones…" line. When exactly one phone appears, the wizard moves on by itself; with several it moves to page 2.
 2. **Choose your phone.** Name, model, app version and address of each phone found, plus "Enter address manually".
-3. **Picture.** Stream preset, look, and "Set up the camera for streaming" (on by default, CTL-8); a Beauty style joins them in 1.1. Each choice has its tooltip; nothing else is asked.
+3. **Picture.** Stream preset, look, Beauty (None by default, or a style, which attaches Beautify at 50), and "Set up the camera for streaming" (on by default, CTL-8). Each choice has its tooltip; nothing else is asked.
 
 Finish adds the source to the current scene fitted to the canvas and shows the Camera Controls dock with it (ONE-1). The source then saves the phone's settings the first time it meets that phone (the [before snapshot](architecture.md#reset-and-restore)), sets up the stream, applies the look and, once connected, Set up for streaming. Its state shows in the dock and in its properties, with the cause and fix of any error.
 

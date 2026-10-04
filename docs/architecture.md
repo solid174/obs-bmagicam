@@ -45,17 +45,20 @@ src/
   stream/                StreamReceiver: SRT listener, demux, decode, timestamps
   source/                iPhone Camera obs_source_info, properties, histogram
   sync/                  microphone sync: capture and the GCC-PHAT lag estimate
+  filter/                Beautify: the filter and its passes, styles, the skin and noise model
   ui/                    Camera Controls dock and its panels, painted controls in widgets/, wizard, setup guide
 data/
   locale/                en-US.ini, ru-RU.ini
   looks/builtin.json     built-in looks
+  beauty/styles.json     built-in Beauty styles
+  effects/beautify.effect  Beautify's GPU passes
   images/setup/          phone screenshots for the wizard
   THIRD-PARTY-NOTICES.txt
 ```
 
-Version 1.1 adds `filter/` and `data/effects/` for Beautify, and `remote/` and `data/panel/` for Remote Control.
+Remote Control adds `remote/` and `data/panel/` in 1.1.
 
-Modules depend downward only: `ui` uses `source`, `camera` and `sync`; `camera` uses `phone`, `stream` and `discovery`. Nothing below `ui` uses Qt widgets, and nothing below `camera` knows about OBS sources.
+Modules depend downward only: `ui` uses `source`, `filter`, `camera` and `sync`; `camera` uses `phone`, `stream` and `discovery`. Nothing below `ui` uses Qt widgets, and nothing below `camera` knows about OBS sources.
 
 ## Camera session
 
@@ -111,6 +114,8 @@ So a scene collection always reproduces its stream format and its look, while li
 ### How the dock binds to the phone
 
 `CameraControls` keeps the phone's last known value of every property the dock shows, as the phone sends it, and tells listeners which ones changed; the dock gathers them per pass of Qt's event loop, so a burst of events updates it once. Each row of the dock binds to its property directly and reads its range or list from the phone (`description` and `supported…` endpoints), so a control appears only where the phone answers for it (CTL-1). A change shows in `CameraControls` at once and goes out through the write queue; when the phone refuses it, the phone's value comes back. The full list of controls is in [ui.md](ui.md#control-map).
+
+The Beauty controls bind to the source's Beautify filter instead. Filters are private sources, so their changes are not announced globally: the dock follows the filter's own `update` and `enable` signals, and the global ones for added and removed filters.
 
 In 1.1 the web panel and the API need the same controls, and a table of control descriptors (ID, phone endpoint and field, value type, range source, unit, lock rules, stream impact, Simple or Advanced, locale keys, factory default) replaces the dock's direct bindings, so one list keeps the three surfaces identical.
 
@@ -231,37 +236,46 @@ A microphone connected to the computer reaches OBS within a few milliseconds, wh
 
 ## Beautify (1.1)
 
-Beautify retouches skin and nothing else (BEA-8). It runs on the GPU as OBS `.effect` files, which OBS compiles for Direct3D 11, OpenGL and Metal.
+Beautify retouches skin and nothing else (BEA-8). It is an ordinary OBS video filter (`filter/`), so it works on any video source (BEA-1), and it runs on the GPU as one OBS effect, `data/effects/beautify.effect`, which OBS compiles for Direct3D 11, OpenGL and Metal.
 
 The core idea comes from [ctbot000/face-beautifier](https://github.com/ctbot000/face-beautifier) (MIT), a WebGL beautifier: frequency separation, where small skin detail such as pores and blemishes is flattened and large detail such as lashes, nostrils and the lip line is kept, so heavy smoothing still does not look plastic. No code is taken from it (LIC-2); Beautify is written for OBS from scratch. What changes against the reference:
 
 | Reference | Beautify |
 | --- | --- |
 | Gaussian base blur, which pulls color across face contours at high strength | Edge-aware base: a guided filter on luma, so contours stay clean |
-| Fixed YCbCr thresholds for skin when there are no landmarks | Adaptive skin model: skin chroma is learned from the frame around the skin-tone line and follows it slowly, so it holds for every skin tone and white balance |
+| Fixed YCbCr thresholds for skin when there are no landmarks | Adaptive skin model: skin chroma is learned from the picture and followed slowly, so it holds for every skin tone and white balance |
 | Mask recomputed every frame | Mask blended over time, so nothing flickers (BEA-5) |
 | Edge thresholds in absolute luma | Thresholds scaled by the measured image noise, so low and high ISO give the same result |
-| Smoothing radius from the face width (landmarks) | 1.0: from the frame size and an advanced "Detail size". 1.1: from each face (FACE-7) |
+| Smoothing radius from the face width (landmarks) | 1.1: from the frame height and the advanced Detail size. 1.2: from each face (FACE-7) |
 | Reshaping, makeup, color grading, vignette, grain, compare, export | Dropped (BEA-8); color is the looks' job on the phone |
-| Under-eye lift, eye brightening | Moved to 1.1, where face landmarks exist (FACE-7) |
+| Under-eye lift, eye brightening | 1.2, where face landmarks exist (FACE-7) |
 
-Passes per frame:
+Passes per frame, all but the first and the last at half or quarter resolution:
 
-1. Half-resolution copy, plus a slowly updated estimate of the image noise taken from flat areas.
-2. Skin mask: adaptive chroma likelihood times a luminance gate, feathered by Mask softness, blended with the previous frame's mask.
-3. Bases: a guided filter on luma at half resolution (fine), and a wider low-pass at quarter resolution (wide).
-4. Composite at full resolution:
-   - **Smoothing:** `detail = source − fine`. Inside the mask, small detail is attenuated by the strength, large detail (above a noise-scaled edge threshold) is kept. Texture keeps a share of the fine detail.
-   - **Tone evening:** inside the mask, small dark spots are lifted towards the wide base and chroma is pulled towards the surrounding skin, which evens blemishes and redness.
-   - **Sharpening:** outside the mask, `source − wide` is added back, so eyes, brows and hair look crisp next to smooth skin.
+1. **Capture** of the source at full resolution, as encoded.
+2. **Half and quarter resolution** copies, with luma alongside.
+3. **Skin mask** at half resolution. Each color's hue and saturation are compared with the learned skin color as an angle and a ratio, so the comparison holds at every exposure; colors less saturated than skin, such as gray hair, teeth and white walls, count as skin less readily. A luma gate leaves out the darkest and brightest areas. A texture gate, the luma deviation over 3 × 3 pixels, leaves out hair, lashes and brows whatever their color (BEA-4), and costs the face's outline only a thin line. Mask softness widens what counts as skin. The mask is blended with the previous frame's with a time constant of 50 ms (BEA-5).
+4. **Fine base:** a guided filter on luma at half resolution, two passes for the means and two for the coefficients, which also feather the mask. Its regularization grows with Smoothing and with the noise; its window follows the frame height and Detail size.
+5. **Wide base:** a Gaussian blur at quarter resolution, the surrounding skin.
+6. **Statistics,** every sixth frame: 48 blocks across the picture, each with the mean chroma of its skin-like samples, how skin-like it is, and the small-scale detail of its mid-tones. They are read back on the next round, so reading never waits for the GPU. The skin model (`SkinModel`) takes the skin color from the skin-like blocks, refined twice around its first estimate so one area of skin wins over skin-like things elsewhere, and kept within plausible skin; the noise is the detail of the flattest fifth of the mid-tone blocks. Both follow the picture with a time constant of 1.5 s.
+7. **Composite** at full resolution:
+   - **Smoothing:** `detail = luma − fine base`. Inside the mask, detail is attenuated by the strength; detail above a noise-scaled threshold stays. Texture keeps a share of the finest grain, the difference to the half-resolution picture.
+   - **Tone evening:** inside the mask, pixels darker than the surrounding skin are lifted towards it, up to a limit, and chroma is pulled towards the surrounding skin's, which evens blemishes and redness. Large shadows are dark in the surrounding skin too, so they stay.
+   - **Sharpening:** outside the mask, the finest grain and part of the fine detail are added back, above the noise, so eyes, brows and hair look crisp next to smooth skin.
    - **Glow:** a soft bloom of the wide base on skin highlights.
-5. Show mask draws the mask as an overlay (BEA-6).
+   - **Show mask** draws the mask over a dimmed picture (BEA-6).
 
-**Style and strength (BEA-2, BEA-3).** A style is a full set of advanced values: Natural, Soft and Glam are built in, and the user's own come from the advanced sliders. The Beauty slider `s` from 0 to 1 sends each value through its own response curve, for example smoothing ∝ s^0.8, tone evening ∝ s, glow ∝ s², with texture kept higher at low `s`. The first half of the slider stays natural; the top reaches the full style. The curves are tuned on real faces in M3.
+A source shown in several views is retouched once per frame; the other views only composite.
 
-At `s = 0`, or when the filter is disabled, it calls `obs_source_skip_video_filter` and runs no passes (BEA-7, PWR-1). The work is about eight passes, most at half or quarter resolution; GPU time is measured with OBS's render statistics on the hardware in [requirements.md](requirements.md#hardware-and-power). SDR sources are processed as encoded, like a retouching tool does. HDR sources pass through untouched in 1.0.
+**Style and strength (BEA-2, BEA-3).** A style is a full set of advanced values. Natural, Soft and Glam are built in (`data/beauty/styles.json`); the user's own are saved from the advanced values into `beauty-styles.json`. The Beauty slider `s` from 0 to 1 sends each value through its own response curve: smoothing ∝ s^0.8, tone evening and sharpening ∝ s, glow ∝ s², and texture stays higher at low `s`. Mask softness and Detail size shape the effect and do not scale with it. The first half of the slider stays natural; the top reaches the full style.
 
-Tests, after the reference's self-test idea: neutral settings are a bit-exact identity; smoothing acts only inside the mask and only on small detail. They run in CI on Linux with a software OpenGL context.
+At `s = 0` without Show mask, when the filter is disabled, or for HDR sources, the filter calls `obs_source_skip_video_filter` and runs no passes, so the picture passes through untouched (BEA-7, PWR-1). SDR sources are processed as encoded, like a retouching tool does.
+
+**Cost.** On a MacBook Air with Apple silicon, OBS's average frame render time at 1080p60 went from about 1.8 ms to 2.9–3.4 ms with Beautify on a 1080p source (NFR-1). Intel Iris Xe is still to measure.
+
+**Limits without face detection.** The mask comes from color and texture, so skin-colored things with little texture, such as tan fur, wood or an orange-red object, can count as skin. Show mask shows it and a lower Mask softness narrows it; Selected mode in 1.2 applies Beautify only to the chosen faces.
+
+**Tests.** Unit tests cover the styles file, the response curves and the skin model. The load test starts OBS with a Beautify filter in its scene collection, so CI compiles the effect with Direct3D 11 on Windows, OpenGL on Ubuntu and macOS, and Metal on macOS.
 
 ## Stabilization
 
@@ -284,6 +298,7 @@ The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera o
 | --- | --- |
 | Phone `device_id` or manual address, stream preset, look and color, connection settings | iPhone Camera source settings (scene collection) |
 | User looks | `looks.json` in the module config folder |
+| User Beauty styles (1.1) | `beauty-styles.json` |
 | Before snapshots | `snapshots/<phone>.json` |
 | The phone's own livestream destination and video format while a source uses the phone | `destinations.json` |
 | Simple or Advanced mode | `ui.json` |

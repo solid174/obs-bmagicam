@@ -2,6 +2,10 @@
 
 User-visible changes in each release. Versions follow [semantic versioning](https://semver.org).
 
+## 1.1.0 (unreleased)
+
+- **Beautify:** a skin smoothing filter for any video source, on the GPU. Styles Natural, Soft and Glam and your own, one Beauty slider, and advanced values for smoothing, texture, tone evening, sharpening, glow, mask softness and detail size. The skin mask adapts to every skin tone and white balance and keeps eyes, brows, lips, hair and the background sharp; Show mask shows it. At 0 or turned off it leaves the picture untouched. In the dock as a Beauty row (Simple) and tab (Advanced), and as a choice in Add iPhone Camera.
+
 ## 1.0.1 (2026-10-04)
 
 - When the phone says it streams but no picture arrives, the dock now first asks you to look at the phone's screen for a message from Blackmagic Camera, such as "Audio Source Unavailable", and only then to check the firewall and the network.

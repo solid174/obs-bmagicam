@@ -57,7 +57,7 @@ The first time OBS talks to the phone, your computer may ask for permission:
 
 1. In OBS: **Tools → Add iPhone Camera…**
 2. The first page repeats the phone steps and waits for your phone. As soon as it appears, the wizard moves on.
-3. Choose the stream preset (1080p60 High is right for most streams; the 4K presets look sharper but add delay and need strong 5 GHz Wi-Fi) and a look. Leave **Set up the camera for streaming** on. Hover over any choice to see what it does.
+3. Choose the stream preset (1080p60 High is right for most streams; the 4K presets look sharper but add delay and need strong 5 GHz Wi-Fi), a look and, if you like, a Beauty style. Leave **Set up the camera for streaming** on. Hover over any choice to see what it does.
 4. **Add Camera** adds it to the current scene, fitted to the canvas, and opens the Camera Controls dock with it. The first time it meets your phone, the plugin saves the phone's current settings, so you can always get them back. The picture appears within a few seconds.
 
 ## 5. Adjust the picture
@@ -69,7 +69,17 @@ The first time OBS talks to the phone, your computer may ask for permission:
 - **Advanced** (check box at the top of the dock) shows every camera setting: the histogram, the camera's ISO, shutter, white balance and lens, color, focus, the phone's audio and its own screen. Hover over any control to see what it does.
 - **Phone presets** (⋮ menu) saves the camera's settings on the phone under a name and loads them again.
 
-## 6. Sync a computer microphone
+## 6. Smooth skin with Beautify
+
+Beautify smooths skin and keeps eyes, brows, lips, hair and the background sharp. It is an OBS filter, so it works on any video source: the iPhone Camera, a webcam, a capture card or a video.
+
+- **On the iPhone Camera:** the dock's **Beauty** row → **Add Beauty**, then choose a style and move the Beauty slider. The first half of the slider stays natural.
+- **On any other source:** right-click it → **Filters** → **+** under Effect Filters → **Beautify**.
+- **Styles:** Natural keeps skin real, Soft smooths more and adds a little glow, Glam is the strongest. **Advanced** in the dock, or in the filter's properties, shows the values a style is made of; **Save as style…** keeps your own.
+- **Show mask** colors what Beautify treats as skin. If it takes in something else of a skin-like color, such as a wooden table or a tan pet, lower **Mask softness**.
+- At 0, or turned off, Beautify leaves the picture exactly as it was and costs nothing.
+
+## 7. Sync a computer microphone
 
 A microphone connected to the computer hears you about half a second before the iPhone's picture shows you. The iPhone's own audio is always in sync: if you use it, mute the computer's microphone in OBS's Audio Mixer and you are done. If you use a computer microphone instead:
 
@@ -80,7 +90,7 @@ A microphone connected to the computer hears you about half a second before the 
 
 If it says it could not measure, nothing changed: talk or clap closer to both microphones and try again.
 
-## 7. Reset
+## 8. Reset
 
 In the Camera Controls menu (⋮):
 
@@ -97,6 +107,7 @@ In the Camera Controls menu (⋮):
 | "The phone streams, but no picture arrives" | Blackmagic Camera shows a message on the phone, the firewall blocks the stream, or the Wi-Fi is set to Public | Answer the message on the phone; otherwise step 3 |
 | Found on macOS only after a long wait, or never | OBS was denied local network access | System Settings → Privacy & Security → Local Network → OBS → on, then restart OBS |
 | The picture stutters | Weak Wi-Fi or 2.4 GHz | Move closer to the router, use 5 GHz, or connect the computer to the iPhone's hotspot. A lower stream preset also helps |
+| Beautify smooths something that is not skin | It has a skin-like color and little texture | Lower Mask softness; Show mask shows what counts as skin |
 | The phone gets hot | Long stream with the screen at full brightness | Dock → Phone → Phone screen → Brightness down, and keep the phone out of direct sun |
 | "Audio Source Unavailable! … iPhone Microphone has been disconnected" on the phone, and the picture stops | Blackmagic Camera lost the phone's microphone; the cause is not known yet | Tap OK on the phone. OBS reconnects by itself |
 | "Update Blackmagic Camera" | App older than 3.4 | Update it from the App Store |
