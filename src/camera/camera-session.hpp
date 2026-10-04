@@ -92,9 +92,6 @@ public:
 	void set_active(bool active);
 	Status status() const;
 
-	// Waits for ended sessions that are still putting their phones back; for module unload.
-	static void wait_for_ended_sessions();
-
 private:
 	struct Core;
 	std::shared_ptr<Core> core_;

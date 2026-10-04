@@ -3,6 +3,7 @@
 
 #include "camera-source.hpp"
 
+#include "../camera/camera-controls.hpp"
 #include "../camera/camera-session.hpp"
 #include "../camera/stream-presets.hpp"
 #include "../discovery/phone-browser.hpp"
@@ -16,6 +17,8 @@ extern "C" {
 #include <libavutil/pixdesc.h>
 }
 
+#include <algorithm>
+#include <cstring>
 #include <mutex>
 #include <set>
 #include <string>
@@ -167,7 +170,10 @@ std::string status_text(const CameraSession::Status &status)
 
 class CameraSource final : public CameraSession::Output {
 public:
-	CameraSource(obs_source_t *source, obs_data_t *settings) : source_(source), session_(*this, os_gettime_ns)
+	CameraSource(obs_source_t *source, obs_data_t *settings)
+		: source_(source),
+		  controls_(std::make_shared<CameraControls>()),
+		  session_(*this, os_gettime_ns)
 	{
 		// New phones appear in an open properties window
 		discovery_listener_ =
@@ -184,6 +190,10 @@ public:
 	void update(obs_data_t *settings);
 	void set_shown(bool shown) { session_.set_active(shown); }
 	void add_status(obs_properties_t *properties) const;
+	void focus_at(int32_t x, int32_t y);
+
+	const std::shared_ptr<CameraControls> &controls() const { return controls_; }
+	CameraSession::Status status() const { return session_.status(); }
 
 	void session_video(const AVFrame &frame, uint64_t timestamp) override;
 	void session_audio(const float *const planes[2], uint32_t frames, uint64_t timestamp) override;
@@ -192,6 +202,7 @@ public:
 
 private:
 	obs_source_t *source_;
+	std::shared_ptr<CameraControls> controls_;
 	int discovery_listener_ = 0;
 	int port_ = 0;
 	bool logged_format_ = false;
@@ -216,6 +227,18 @@ void CameraSource::update(obs_data_t *settings)
 	next.receiver.latency_ms = static_cast<int>(obs_data_get_int(settings, kLatency));
 	next.receiver.hardware_decoding = obs_data_get_bool(settings, kHardwareDecoding);
 	session_.update(next);
+	controls_->set_phone(next.phone_id, next.address);
+}
+
+void CameraSource::focus_at(int32_t x, int32_t y)
+{
+	const uint32_t width = obs_source_get_width(source_);
+	const uint32_t height = obs_source_get_height(source_);
+	if (width == 0 || height == 0)
+		return;
+	const double fx = std::clamp(static_cast<double>(x) / width, 0.0, 1.0);
+	const double fy = std::clamp(static_cast<double>(y) / height, 0.0, 1.0);
+	controls_->act("/lens/focus/doAutoFocus", {{"position", {{"x", fx}, {"y", fy}}}});
 }
 
 void CameraSource::add_status(obs_properties_t *properties) const
@@ -302,6 +325,13 @@ void camera_hide(void *data)
 	static_cast<CameraSource *>(data)->set_shown(false);
 }
 
+// A click in the Interact window focuses there, like a tap on the phone's screen (CTL-5)
+void camera_mouse_click(void *data, const obs_mouse_event *event, int32_t type, bool mouse_up, uint32_t)
+{
+	if (type == MOUSE_LEFT && mouse_up)
+		static_cast<CameraSource *>(data)->focus_at(event->x, event->y);
+}
+
 void camera_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, kPreset, stream_presets().front().id);
@@ -381,7 +411,8 @@ void register_camera_source()
 	obs_source_info info = {};
 	info.id = kCameraSourceId;
 	info.type = OBS_SOURCE_TYPE_INPUT;
-	info.output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_AUDIO | OBS_SOURCE_DO_NOT_DUPLICATE;
+	info.output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_AUDIO | OBS_SOURCE_DO_NOT_DUPLICATE |
+			    OBS_SOURCE_INTERACTION;
 	info.icon_type = OBS_ICON_TYPE_CAMERA;
 	info.get_name = camera_get_name;
 	info.create = camera_create;
@@ -391,7 +422,28 @@ void register_camera_source()
 	info.hide = camera_hide;
 	info.get_defaults = camera_defaults;
 	info.get_properties = camera_properties;
+	info.mouse_click = camera_mouse_click;
 	obs_register_source(&info);
+}
+
+bool is_camera_source(obs_source_t *source)
+{
+	const char *id = source ? obs_source_get_unversioned_id(source) : nullptr;
+	return id && std::strcmp(id, kCameraSourceId) == 0;
+}
+
+std::shared_ptr<CameraControls> camera_controls(obs_source_t *source)
+{
+	if (!is_camera_source(source))
+		return nullptr;
+	return static_cast<CameraSource *>(obs_obj_get_data(source))->controls();
+}
+
+CameraSession::Status camera_status(obs_source_t *source)
+{
+	if (!is_camera_source(source))
+		return {};
+	return static_cast<CameraSource *>(obs_obj_get_data(source))->status();
 }
 
 } // namespace bmagicam

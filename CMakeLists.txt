@@ -68,6 +68,10 @@ target_sources(
   ${CMAKE_PROJECT_NAME}
   PRIVATE
     src/plugin-main.cpp
+    src/camera/background-work.cpp
+    src/camera/background-work.hpp
+    src/camera/camera-controls.cpp
+    src/camera/camera-controls.hpp
     src/camera/camera-session.cpp
     src/camera/camera-session.hpp
     src/camera/network.cpp
@@ -84,6 +88,8 @@ target_sources(
     src/phone/camera-client.hpp
     src/phone/event-socket.cpp
     src/phone/event-socket.hpp
+    src/phone/write-queue.cpp
+    src/phone/write-queue.hpp
     src/source/camera-source.cpp
     src/source/camera-source.hpp
     src/stream/ffmpeg-check.cpp

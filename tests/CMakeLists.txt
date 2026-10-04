@@ -17,11 +17,13 @@ target_sources(
     test-main.cpp
     media-clock-test.cpp
     streaming-test.cpp
+    write-queue-test.cpp
     ../src/camera/stream-presets.cpp
     ../src/camera/streaming-xml.cpp
     ../src/stream/media-clock.cpp
+    ../src/phone/write-queue.cpp
 )
 target_include_directories(obs-bmagicam-tests PRIVATE ../src)
-target_link_libraries(obs-bmagicam-tests PRIVATE doctest::doctest)
+target_link_libraries(obs-bmagicam-tests PRIVATE doctest::doctest nlohmann_json::nlohmann_json)
 
 add_test(NAME obs-bmagicam-tests COMMAND obs-bmagicam-tests)

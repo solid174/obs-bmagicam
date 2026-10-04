@@ -4,7 +4,7 @@
 #include <obs-module.h>
 #include <plugin-support.h>
 
-#include "camera/camera-session.hpp"
+#include "camera/background-work.hpp"
 #include "discovery/phone-browser.hpp"
 #include "filter/beautify-filter.hpp"
 #include "source/camera-source.hpp"
@@ -41,7 +41,7 @@ bool obs_module_load(void)
 void obs_module_unload(void)
 {
 	// Removed sources put their phones back in the background; the code they run must stay loaded until then
-	bmagicam::CameraSession::wait_for_ended_sessions();
+	bmagicam::wait_for_background_work(std::chrono::seconds(15));
 	bmagicam::PhoneBrowser::shutdown();
 	obs_log(LOG_INFO, "plugin unloaded");
 }

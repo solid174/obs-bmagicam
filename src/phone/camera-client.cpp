@@ -31,6 +31,11 @@ ApiReply CameraClient::put(const std::string &path, const nlohmann::json &body) 
 	return request(Method::Put, path, body.is_null() ? std::string() : body.dump(), "application/json");
 }
 
+ApiReply CameraClient::post(const std::string &path, const nlohmann::json &body) const
+{
+	return request(Method::Post, path, body.is_null() ? std::string() : body.dump(), "application/json");
+}
+
 ApiReply CameraClient::put_xml(const std::string &path, const std::string &xml) const
 {
 	return request(Method::Put, path, xml, "application/xml");
@@ -60,6 +65,9 @@ ApiReply CameraClient::request(Method method, const std::string &path, const std
 			break;
 		case Method::Put:
 			result = client.Put(target, body, content_type);
+			break;
+		case Method::Post:
+			result = client.Post(target, body, content_type);
 			break;
 		case Method::Delete:
 			result = client.Delete(target);

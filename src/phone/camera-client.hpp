@@ -34,11 +34,12 @@ public:
 
 	ApiReply get(const std::string &path) const;
 	ApiReply put(const std::string &path, const nlohmann::json &body = nullptr) const;
+	ApiReply post(const std::string &path, const nlohmann::json &body = nullptr) const;
 	ApiReply put_xml(const std::string &path, const std::string &xml) const;
 	ApiReply remove(const std::string &path) const;
 
 private:
-	enum class Method { Get, Put, Delete };
+	enum class Method { Get, Put, Post, Delete };
 
 	ApiReply request(Method method, const std::string &path, const std::string &body,
 			 const std::string &content_type) const;

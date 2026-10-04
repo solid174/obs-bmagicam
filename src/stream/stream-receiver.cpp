@@ -161,6 +161,7 @@ private:
 	bool silent_ = false;
 
 	bool logged_first_frame_ = false;
+	bool logged_reordering_ = false;
 	std::atomic<int> logged_errors_ = 0;
 	uint64_t stats_start_ = 0;
 	uint64_t stats_bytes_ = 0;
@@ -295,6 +296,10 @@ void StreamReceiver::Connection::handle_packet(const AVPacket *packet, uint64_t 
 		return;
 
 	stats_bytes_ += static_cast<uint64_t>(packet->size);
+	if (video && !logged_reordering_ && packet->dts != AV_NOPTS_VALUE && packet->pts != packet->dts) {
+		logged_reordering_ = true;
+		obs_log(LOG_INFO, "the video has reordered frames (B-frames)");
+	}
 
 	{
 		std::lock_guard lock(mutex_);

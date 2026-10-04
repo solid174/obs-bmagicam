@@ -3,6 +3,7 @@
 
 #include "camera-session.hpp"
 
+#include "background-work.hpp"
 #include "network.hpp"
 #include "stream-presets.hpp"
 #include "streaming-xml.hpp"
@@ -41,11 +42,6 @@ constexpr auto kConnectWait = 5s;
 // The phone's server pauses for a few seconds after a video format change
 constexpr auto kFormatChangePause = 10s;
 constexpr std::chrono::milliseconds kRetryPauses[] = {500ms, 1s, 2s, 4s, 5s};
-
-// Threads of sessions, including ended ones that still put their phones back
-std::mutex running_mutex;
-std::condition_variable running_cv;
-int running_sessions = 0;
 
 std::string string_at(const nlohmann::json &object, const char *key)
 {
@@ -591,18 +587,7 @@ CameraSession::CameraSession(Output &output, StreamReceiver::Clock clock) : core
 			core->cv.notify_all();
 		}
 	});
-	{
-		std::lock_guard lock(running_mutex);
-		running_sessions++;
-	}
-	std::thread([core = core_] {
-		core->run();
-		{
-			std::lock_guard lock(running_mutex);
-			running_sessions--;
-		}
-		running_cv.notify_all();
-	}).detach();
+	run_in_background([core = core_] { core->run(); });
 }
 
 CameraSession::~CameraSession()
@@ -644,12 +629,6 @@ CameraSession::Status CameraSession::status() const
 {
 	std::lock_guard lock(core_->mutex);
 	return core_->status;
-}
-
-void CameraSession::wait_for_ended_sessions()
-{
-	std::unique_lock lock(running_mutex);
-	running_cv.wait_for(lock, 15s, [] { return running_sessions == 0; });
 }
 
 } // namespace bmagicam
