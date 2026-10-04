@@ -90,6 +90,7 @@ Run on the release candidate packages, installed from the draft release on clean
 | Stream | 1080p60 for 30 min: no dropped or lagged frames in OBS's stats, audio in sync | All three |
 | Latency | Glass to glass: the phone films a millisecond clock on the OBS computer's screen next to OBS's preview of it (NFR-2) | All three |
 | Lip sync | Clap test in an OBS recording at the start and after two hours: audio within 40 ms ahead and 60 ms behind the picture; again after a reconnect (NFR-6) | All three |
+| Microphone sync | With a USB microphone: Sync while talking, then a clap test in a recording: the microphone within 40 ms ahead and 60 ms behind the iPhone's picture; Undo restores the offset (SYN-1 to SYN-3) | All three |
 | 4K presets | 4K30 and 4K60 stream for 10 min without drops; the extra delay matches the preset's description | All three |
 | Reconnect | Wi-Fi off and on, app to background and back, phone locked and unlocked: recovers without action (CAM-6) | All three |
 | Hide and show | Stream stops 2 s after hiding and resumes on show (CAM-7) | One |

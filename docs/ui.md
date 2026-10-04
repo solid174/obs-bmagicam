@@ -102,6 +102,7 @@ The default. Everything a streamer needs, on one page, in everyday words. Select
 │ Lens        [Front]  0.5×   1×   2×   4×   8×                    │
 │ Focus       (Auto)  [Refocus]                                    │
 │ Stabilize   [Off]  Standard  Cinematic  Extreme                  │
+│ Microphone  [Mic/Aux                 ▾]  [Sync]                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -115,6 +116,7 @@ The default. Everything a streamer needs, on one page, in everyday words. Select
 | Lens | `lens.camera` | Front, then one button per back lens, labelled the way the iPhone camera labels them (0.5×, 1×, 2×…) |
 | Focus | `focus.mode` (Continuous or One shot), `focus.refocus` | The tooltip mentions clicking the picture in Interact |
 | Stabilization | `lens.stabilization` | The app's modes: Off, Standard, Cinematic, Extreme (STB-2) |
+| Microphone | `audio.syncMicrophone` | Only when the scene has a microphone of the computer's: picks it and syncs it to the picture (SYN-1). The button turns into "Synced · 412 ms" with Undo |
 
 Zoom, the color sliders and everything else stay in Advanced. A status line appears under the rows only when something needs attention, for example "Phone battery at 15 %. Connect a charger." The stream details (format, bitrate, frame rate) are in Advanced and in the state tooltip.
 
@@ -154,6 +156,7 @@ These are the same in both modes:
   - Phone presets: load, save current as…, delete
   - Reset to camera defaults… (RST-1)
   - Restore my settings… (RST-2)
+  - Sync microphone… (SYN-1)
   - Setup guide
   - Remote Control…
 
@@ -197,6 +200,7 @@ Examples:
 | Brightness | Makes the picture brighter or darker. Turn Auto off to keep brightness steady while you stream. |
 | Warmth | Shifts colors cooler (blue) or warmer (orange) to match your lights. Auto sets it once from what the camera sees. |
 | Lens | Switches between the phone's cameras. Front faces you like a selfie; the back lenses give the best picture. |
+| Microphone | Your computer's microphone hears you before the iPhone's picture shows you, by about half a second. Sync delays the microphone to match: talk or clap for a few seconds. |
 | Stabilization | Steadies handheld shots: Standard for small shakes, Cinematic for smooth moves, Extreme for walking. It crops the picture, more in the stronger modes, so leave it Off on a tripod. |
 | ISO (Advanced) | How sensitive the sensor is. Higher is brighter but grainier; keep it as low as your light allows. |
 | Shutter (Advanced) | How long each frame is exposed. Values marked ✓ avoid flicker from room lights; at 60 fps, 1/120 (1/100 where mains power is 50 Hz) looks most natural. |

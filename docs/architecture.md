@@ -207,6 +207,15 @@ The phone offers only global saturation and hue, not saturation by hue, so the l
 
 Each step goes through the same coalescer, and every value stays adjustable in the dock afterwards.
 
+## Microphone sync
+
+A microphone connected to the computer reaches OBS within a few milliseconds, while the iPhone's picture arrives about 0.45 s after the moment it shows ([Latency budget](#latency-budget)). The iPhone's own audio travels with its picture and stays in sync; a computer microphone runs ahead and has to be delayed (SYN-1).
+
+- **Capture.** `obs_source_add_audio_capture_callback` on the iPhone Camera source and on the chosen microphone delivers both with their OBS timestamps, before any Sync Offset: the iPhone's as the receiver mapped them, the microphone's as its source stamped them.
+- **Measure.** Both are mixed to mono and resampled to 8 kHz. Over an 8-second window, a cross-correlation with phase transform (GCC-PHAT), computed with FFmpeg's FFT (`av_tx` in libavutil, no new dependency), finds the lag at which the two match, searched within ±1.5 s. Speech and claps give a sharp peak even though the two microphones sound different.
+- **Trust.** The peak must stand well above the rest of the correlation, and two windows in a row must agree within 5 ms; otherwise the result is "could not measure" and nothing changes (SYN-3). The resolution is 0.125 ms.
+- **Apply.** `obs_source_set_sync_offset` on the microphone, to the measured lag. The lag is measured before any offset, so syncing again gives the same value instead of adding up. The previous offset is kept for Undo (SYN-2).
+
 ## Reset and restore
 
 - **Reset to camera defaults (RST-1):** `PUT /presets/active {"preset":"default"}`, then neutral color correction. If V-5 shows that `default` misses settings, the plugin applies a factory table for those settings, captured once from a fresh install of the app version it supports.
@@ -357,7 +366,7 @@ Each milestone leaves a working plugin on all three platforms.
 | --- | --- | --- |
 | M0 Skeleton | Plugin from obs-plugintemplate; empty source, filter, dock and Tools entries; locale files; CI builds and packages for Windows, macOS and Linux | The packages install and load in OBS on all three |
 | M1 Camera | Discovery, CameraClient, stream setup, receiver with hardware decoding, session states, reconnect, stop when hidden, minimal wizard | 1080p60 for 30 min without drops on all three; lip sync within NFR-6 at the start and after two hours; V-1 to V-4, V-7, V-8, V-11, V-12 and V-14 to V-18 answered |
-| M2 Controls | Control descriptors with tooltips, the dock in Simple and Advanced modes, two-way sync, locks, tap-to-focus, Set up for streaming, looks, resets, phone stabilization | Every control in [ui.md](ui.md#control-map) works on the test phone; UI-4, UI-5 and UI-6 hold; looks tuned until LOOK-5 holds |
+| M2 Controls | Control descriptors with tooltips, the dock in Simple and Advanced modes, two-way sync, locks, tap-to-focus, Set up for streaming, looks, resets, phone stabilization, microphone sync | Every control in [ui.md](ui.md#control-map) works on the test phone; UI-4, UI-5 and UI-6 hold; looks tuned until LOOK-5 holds |
 | M3 Beautify | Beautify with styles, the Beauty slider, advanced sliders and show mask | BEA-1 to BEA-8 and NFR-1 met on the listed hardware |
 | M4 Remote Control | Server, API, web panel, Tools dialog | WEB-1 to WEB-5; the panel controls everything the dock does |
 | M5 Release | Full wizard with screenshots, Russian, theme pass, signing and notarization, documentation | The release checklist in [releasing.md](releasing.md) passes |

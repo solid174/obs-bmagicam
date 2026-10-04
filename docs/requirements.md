@@ -54,6 +54,12 @@ All components ship in one plugin. Source and filter do not depend on each other
 - **STB-2** The modes are the app's: Off, Standard, Cinematic and Extreme. Each says what it is for and what it costs: stabilization crops the picture, more in the stronger modes. Off suits a phone on a tripod.
 - **STB-3** The plugin adds no stabilization of its own.
 
+## Microphone sync
+
+- **SYN-1** "Sync microphone" puts a microphone connected to the computer, or any other OBS audio source, in step with the iPhone's picture, so a voice recorded on the computer stays lip-synced with the iPhone's video. The iPhone's own audio needs nothing: it arrives in sync (NFR-6).
+- **SYN-2** It measures the delay from sound that both microphones hear while the user talks or claps for a few seconds, without test tones, then sets that source's Sync Offset (the one in OBS's Advanced Audio Properties) and shows the value. Undo puts the previous offset back.
+- **SYN-3** The result is within 10 ms. When it cannot measure, for example in silence or with the iPhone's microphone muted, it says so and changes nothing.
+
 ## Reset
 
 - **RST-1** "Reset to camera defaults" returns every camera setting to how a fresh install of Blackmagic Camera has it.
@@ -96,7 +102,7 @@ All components ship in one plugin. Source and filter do not depend on each other
 - **UI-1** Looks like part of OBS in every built-in theme (Default, Classic, Acri, Grey, Light, Rachni and System) and follows a theme change without a restart.
 - **UI-2** Uses OBS's own building blocks: a dock, source properties, Tools menu entries and a wizard. No colors, fonts or window styles of its own: controls the plugin draws itself take every color and its font from the current theme.
 - **UI-3** Scrolling through the dock never changes a setting. Sliders respond to the mouse wheel only when focused, as in OBS's own properties.
-- **UI-4** Simple and Advanced modes. Simple, the default, is never crowded: eight rows on one page (Set up for streaming, look, Beauty, brightness, warmth, lens, focus, stabilization) in everyday words instead of camera terms, and a status line only when something needs attention. Advanced shows every control. The dock, the web panel and the Beautify properties all have both modes.
+- **UI-4** Simple and Advanced modes. Simple, the default, is never crowded: eight rows on one page (Set up for streaming, look, Beauty, brightness, warmth, lens, focus, stabilization), plus a microphone row when the scene has a microphone of the computer's (SYN-1), in everyday words instead of camera terms, and a status line only when something needs attention. Advanced shows every control. The dock, the web panel and the Beautify properties all have both modes.
 - **UI-5** Every control explains itself: a tooltip says in plain words what it does, what it changes in the picture and when to use it. In the web panel the same text opens with an ⓘ button, because touch screens have no hover.
 - **UI-6** Controls are visual and direct, in the spirit of Blackmagic Camera: values large enough to read at a glance, changed by dragging rulers and clicking tiles and buttons rather than by typing, with short animations that show what changed. A text box appears only where something has to be typed.
 
