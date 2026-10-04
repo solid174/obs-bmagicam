@@ -1,0 +1,16 @@
+{
+	"styles": [
+		{
+			"id": "natural",
+			"values": { "smoothing": 50, "texture": 60, "evening": 35, "sharpen": 25, "glow": 0, "maskSoftness": 50, "detailSize": 50 }
+		},
+		{
+			"id": "soft",
+			"values": { "smoothing": 75, "texture": 40, "evening": 55, "sharpen": 15, "glow": 30, "maskSoftness": 60, "detailSize": 60 }
+		},
+		{
+			"id": "glam",
+			"values": { "smoothing": 90, "texture": 35, "evening": 70, "sharpen": 35, "glow": 45, "maskSoftness": 55, "detailSize": 55 }
+		}
+	]
+}

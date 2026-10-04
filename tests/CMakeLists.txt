@@ -15,20 +15,29 @@ target_sources(
   obs-bmagicam-tests
   PRIVATE
     test-main.cpp
+    beauty-styles-test.cpp
     lag-estimate-test.cpp
     looks-test.cpp
     media-clock-test.cpp
+    skin-model-test.cpp
     streaming-test.cpp
     write-queue-test.cpp
     ../src/camera/looks.cpp
     ../src/camera/stream-presets.cpp
     ../src/camera/streaming-xml.cpp
+    ../src/filter/beauty-styles.cpp
+    ../src/filter/skin-model.cpp
     ../src/stream/media-clock.cpp
     ../src/phone/write-queue.cpp
     ../src/sync/lag-estimate.cpp
 )
 target_include_directories(obs-bmagicam-tests PRIVATE ../src)
-target_compile_definitions(obs-bmagicam-tests PRIVATE LOOKS_FILE="${CMAKE_SOURCE_DIR}/data/looks/builtin.json")
+target_compile_definitions(
+  obs-bmagicam-tests
+  PRIVATE
+    LOOKS_FILE="${CMAKE_SOURCE_DIR}/data/looks/builtin.json"
+    STYLES_FILE="${CMAKE_SOURCE_DIR}/data/beauty/styles.json"
+)
 target_link_libraries(obs-bmagicam-tests PRIVATE doctest::doctest nlohmann_json::nlohmann_json FFmpeg::avutil)
 
 add_test(NAME obs-bmagicam-tests COMMAND obs-bmagicam-tests)

@@ -92,6 +92,14 @@ target_sources(
     src/camera/values.hpp
     src/discovery/phone-browser.cpp
     src/discovery/phone-browser.hpp
+    src/filter/beautify-filter.cpp
+    src/filter/beautify-filter.hpp
+    src/filter/beauty-styles.cpp
+    src/filter/beauty-styles.hpp
+    src/filter/skin-model.cpp
+    src/filter/skin-model.hpp
+    src/filter/style-library.cpp
+    src/filter/style-library.hpp
     src/phone/camera-client.cpp
     src/phone/camera-client.hpp
     src/phone/event-socket.cpp

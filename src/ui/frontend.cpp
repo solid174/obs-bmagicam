@@ -5,17 +5,61 @@
 
 #include "add-camera-wizard.hpp"
 #include "controls-dock.hpp"
+#include "dock-kit.hpp"
 #include "setup-guide.hpp"
+#include "../filter/beautify-filter.hpp"
+#include "../filter/style-library.hpp"
 #include "../source/camera-source.hpp"
 
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 
 #include <QAction>
+#include <QApplication>
 #include <QDockWidget>
+#include <QInputDialog>
 #include <QMainWindow>
+#include <QMessageBox>
 
 namespace bmagicam::ui {
+
+namespace {
+
+// Dialogs from a filter's properties open over the window that shows them
+QWidget *dialog_parent()
+{
+	QWidget *window = QApplication::activeWindow();
+	return window ? window : static_cast<QWidget *>(obs_frontend_get_main_window());
+}
+
+std::string ask_style_name()
+{
+	QWidget *parent = dialog_parent();
+	for (;;) {
+		bool ok = false;
+		const QString name = QInputDialog::getText(parent, text("Beautify.SaveStyle.Title"),
+							   text("Beautify.SaveStyle.Name"), QLineEdit::Normal,
+							   QString(), &ok)
+					     .trimmed();
+		if (!ok || name.isEmpty())
+			return {};
+		// The built-in styles' IDs and Custom are taken
+		const std::string id = name.toStdString();
+		if (id != kCustomStyle && !find_style(builtin_styles(), id))
+			return id;
+		QMessageBox::warning(parent, text("Beautify.SaveStyle.Title"),
+				     text("Beautify.SaveStyle.Taken").arg(name));
+	}
+}
+
+bool confirm_delete_style(const std::string &name)
+{
+	return QMessageBox::question(dialog_parent(), text("Beautify.DeleteStyle"),
+				     text("Beautify.DeleteStyle.Question").arg(QString::fromStdString(name))) ==
+	       QMessageBox::Yes;
+}
+
+} // namespace
 
 void load()
 {
@@ -40,6 +84,8 @@ void load()
 			guide->show();
 		},
 	});
+
+	set_beautify_actions({ask_style_name, confirm_delete_style});
 
 	auto add_camera =
 		static_cast<QAction *>(obs_frontend_add_tools_menu_qaction(obs_module_text("Tools.AddCamera")));

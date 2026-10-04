@@ -1,0 +1,668 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 solid174
+
+#include "beautify-filter.hpp"
+
+#include "skin-model.hpp"
+#include "style-library.hpp"
+
+#include <graphics/vec2.h>
+#include <graphics/vec4.h>
+#include <obs-module.h>
+#include <obs.hpp>
+#include <plugin-support.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <initializer_list>
+#include <iterator>
+#include <mutex>
+#include <utility>
+#include <vector>
+
+namespace bmagicam {
+
+namespace {
+
+constexpr const char *kAdvanced = "advanced";
+constexpr const char *kSaveStyle = "saveStyle";
+constexpr const char *kDeleteStyle = "deleteStyle";
+constexpr const char *kDefaultStyle = "natural";
+// The advanced sliders' names, in the order of kBeautyKeys
+constexpr std::array<const char *, 7> kValueNames = {"Beautify.Smoothing", "Beautify.Texture", "Beautify.Evening",
+						     "Beautify.Sharpen",   "Beautify.Glow",    "Beautify.MaskSoftness",
+						     "Beautify.DetailSize"};
+
+// Statistics blocks across the picture; down it, as many as its shape gives
+constexpr uint32_t kStatsColumns = 48;
+// Statistics are made every this many frames and read the next time, so reading them never waits for the GPU
+constexpr uint64_t kStatsEvery = 6;
+// How fast the skin model and the mask follow the picture
+constexpr float kModelSeconds = 1.5f;
+constexpr float kMaskSeconds = 0.05f;
+
+BeautifyActions beautify_actions;
+
+float squared(float value)
+{
+	return value * value;
+}
+
+class BeautifyFilter {
+public:
+	BeautifyFilter(obs_source_t *context, obs_data_t *settings);
+	~BeautifyFilter();
+
+	obs_source_t *context() const { return context_; }
+	void update(obs_data_t *settings);
+	void tick(float seconds);
+	void render();
+	gs_color_space color_space(size_t count, const gs_color_space *preferred) const;
+
+private:
+	// What rendering takes from the settings
+	struct Look {
+		BeautyAmounts amounts;
+		bool show_mask = false;
+		bool active = false;
+	};
+	struct Params {
+		gs_eparam_t *image = nullptr;
+		gs_eparam_t *image2 = nullptr;
+		gs_eparam_t *image3 = nullptr;
+		gs_eparam_t *image4 = nullptr;
+		gs_eparam_t *blur_step = nullptr;
+		gs_eparam_t *block_step = nullptr;
+		gs_eparam_t *texel = nullptr;
+		gs_eparam_t *skin_chroma = nullptr;
+		gs_eparam_t *skin_spread = nullptr;
+		gs_eparam_t *mask_blend = nullptr;
+		gs_eparam_t *guide_eps = nullptr;
+		gs_eparam_t *smoothing = nullptr;
+		gs_eparam_t *texture_keep = nullptr;
+		gs_eparam_t *evening = nullptr;
+		gs_eparam_t *sharpen = nullptr;
+		gs_eparam_t *glow = nullptr;
+		gs_eparam_t *keep_edge = nullptr;
+		gs_eparam_t *spot_depth = nullptr;
+		gs_eparam_t *coring = nullptr;
+		gs_eparam_t *mask_view = nullptr;
+	};
+	using Inputs = std::initializer_list<std::pair<gs_eparam_t *, gs_texture_t *>>;
+
+	bool capture(obs_source_t *target, obs_source_t *parent, uint32_t width, uint32_t height);
+	void pass(gs_texrender_t *target, const char *technique, uint32_t width, uint32_t height, Inputs inputs);
+	void blur_step(float x, float y);
+	void measure(gs_texture_t *half, gs_texture_t *quarter, uint32_t half_width, uint32_t half_height);
+	void read_stats();
+	void composite(const Look &look, uint32_t width, uint32_t height);
+
+	obs_source_t *context_;
+	std::mutex mutex_;
+	Look look_;
+
+	// Only used on the graphics thread
+	gs_effect_t *effect_ = nullptr;
+	Params params_;
+	gs_texrender_t *input_ = nullptr;
+	gs_texrender_t *half_ = nullptr;
+	gs_texrender_t *quarter_ = nullptr;
+	gs_texrender_t *masks_[2] = {};
+	gs_texrender_t *guide_half_ = nullptr;
+	gs_texrender_t *guide_ = nullptr;
+	gs_texrender_t *coefficients_half_ = nullptr;
+	gs_texrender_t *coefficients_ = nullptr;
+	gs_texrender_t *wide_half_ = nullptr;
+	gs_texrender_t *wide_ = nullptr;
+	gs_texrender_t *stats_ = nullptr;
+	gs_stagesurf_t *stage_ = nullptr;
+	bool staged_ = false;
+	// Which of the two masks is this frame's, and whether the other holds the previous frame's
+	int mask_ = 0;
+	bool mask_valid_ = false;
+	// The passes ran for this frame; another view of the same frame only composites
+	bool processed_ = false;
+	uint32_t width_ = 0;
+	uint32_t height_ = 0;
+	uint64_t frames_ = 0;
+	float frame_seconds_ = 0;
+	float stats_seconds_ = 0;
+	SkinModel model_;
+};
+
+BeautifyFilter::BeautifyFilter(obs_source_t *context, obs_data_t *settings) : context_(context)
+{
+	char *path = obs_module_file("effects/beautify.effect");
+	obs_enter_graphics();
+	char *errors = nullptr;
+	effect_ = path ? gs_effect_create_from_file(path, &errors) : nullptr;
+	if (effect_) {
+		const auto param = [this](const char *name) {
+			return gs_effect_get_param_by_name(effect_, name);
+		};
+		params_ = {param("image"),        param("image2"),     param("image3"),    param("image4"),
+			   param("blur_step"),    param("block_step"), param("texel"),     param("skin_chroma"),
+			   param("skin_spread"),  param("mask_blend"), param("guide_eps"), param("smoothing"),
+			   param("texture_keep"), param("evening"),    param("sharpen"),   param("glow"),
+			   param("keep_edge"),    param("spot_depth"), param("coring"),    param("mask_view")};
+	} else {
+		obs_log(LOG_WARNING, "Beautify cannot load its effect: %s", errors ? errors : "the file is missing");
+	}
+	bfree(errors);
+	input_ = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+	half_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	quarter_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	masks_[0] = gs_texrender_create(GS_R16F, GS_ZS_NONE);
+	masks_[1] = gs_texrender_create(GS_R16F, GS_ZS_NONE);
+	guide_half_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	guide_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	coefficients_half_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	coefficients_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	wide_half_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	wide_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	stats_ = gs_texrender_create(GS_RGBA32F, GS_ZS_NONE);
+	obs_leave_graphics();
+	bfree(path);
+	update(settings);
+}
+
+BeautifyFilter::~BeautifyFilter()
+{
+	obs_enter_graphics();
+	for (gs_texrender_t *texrender : {input_, half_, quarter_, masks_[0], masks_[1], guide_half_, guide_,
+					  coefficients_half_, coefficients_, wide_half_, wide_, stats_})
+		gs_texrender_destroy(texrender);
+	gs_stagesurface_destroy(stage_);
+	gs_effect_destroy(effect_);
+	obs_leave_graphics();
+}
+
+void BeautifyFilter::update(obs_data_t *settings)
+{
+	Look look;
+	const int strength = static_cast<int>(obs_data_get_int(settings, kBeautyStrength));
+	look.amounts = beauty_amounts(beauty_values(settings), strength);
+	look.show_mask = obs_data_get_bool(settings, kBeautyShowMask);
+	// At zero strength the picture stays as it is (BEA-7); the mask can still be shown
+	look.active = strength > 0 || look.show_mask;
+	std::lock_guard lock(mutex_);
+	look_ = look;
+}
+
+void BeautifyFilter::tick(float seconds)
+{
+	frame_seconds_ = seconds;
+	stats_seconds_ += seconds;
+	processed_ = false;
+}
+
+void BeautifyFilter::render()
+{
+	Look look;
+	{
+		std::lock_guard lock(mutex_);
+		look = look_;
+	}
+	obs_source_t *target = obs_filter_get_target(context_);
+	obs_source_t *parent = obs_filter_get_parent(context_);
+	const uint32_t width = target ? obs_source_get_base_width(target) : 0;
+	const uint32_t height = target ? obs_source_get_base_height(target) : 0;
+	const gs_color_space spaces[] = {GS_CS_SRGB, GS_CS_SRGB_16F, GS_CS_709_EXTENDED};
+	// Off, too small, or HDR: the picture passes through untouched, and no passes run (BEA-7, PWR-1)
+	if (!look.active || !effect_ || !target || !parent || width < 8 || height < 8 ||
+	    obs_source_get_color_space(target, std::size(spaces), spaces) != GS_CS_SRGB ||
+	    gs_get_color_space() != GS_CS_SRGB) {
+		obs_source_skip_video_filter(context_);
+		return;
+	}
+	if (processed_ && width == width_ && height == height_) {
+		composite(look, width, height);
+		return;
+	}
+	if (width != width_ || height != height_) {
+		width_ = width;
+		height_ = height;
+		mask_valid_ = false;
+		staged_ = false;
+	}
+	if (!capture(target, parent, width, height)) {
+		obs_source_skip_video_filter(context_);
+		return;
+	}
+
+	gs_blend_state_push();
+	gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
+	const bool srgb = gs_framebuffer_srgb_enabled();
+	gs_enable_framebuffer_srgb(false);
+
+	const uint32_t half_width = (width + 1) / 2;
+	const uint32_t half_height = (height + 1) / 2;
+	const uint32_t quarter_width = (half_width + 1) / 2;
+	const uint32_t quarter_height = (half_height + 1) / 2;
+	pass(half_, "Downsample", half_width, half_height, {{params_.image, gs_texrender_get_texture(input_)}});
+	gs_texture_t *half = gs_texrender_get_texture(half_);
+	pass(quarter_, "Downsample", quarter_width, quarter_height, {{params_.image, half}});
+	gs_texture_t *quarter = gs_texrender_get_texture(quarter_);
+	if (frames_++ % kStatsEvery == 0)
+		measure(half, quarter, half_width, half_height);
+
+	const BeautyAmounts &amounts = look.amounts;
+	const float noise = model_.noise();
+
+	// Skin mask: Mask softness widens what counts as skin and softens the mask's edge
+	const float softness = 0.7f + 0.8f * amounts.mask_softness;
+	vec2 vector;
+	vec2_set(&vector, model_.cb(), model_.cr());
+	gs_effect_set_vec2(params_.skin_chroma, &vector);
+	vec2_set(&vector, 1.0f / squared(0.28f * softness), 1.0f / squared(0.28f * softness));
+	gs_effect_set_vec2(params_.skin_spread, &vector);
+	gs_effect_set_float(params_.mask_blend, mask_valid_ ? 1.0f - std::exp(-frame_seconds_ / kMaskSeconds) : 1.0f);
+	vec2_set(&vector, 1.0f / static_cast<float>(half_width), 1.0f / static_cast<float>(half_height));
+	gs_effect_set_vec2(params_.texel, &vector);
+	gs_texture_t *previous = mask_valid_ ? gs_texrender_get_texture(masks_[mask_]) : half;
+	mask_ = 1 - mask_;
+	pass(masks_[mask_], "Mask", half_width, half_height, {{params_.image, half}, {params_.image2, previous}});
+	mask_valid_ = true;
+
+	// Fine base: a guided filter on luma, which flattens small detail and keeps contours
+	const float scale = static_cast<float>(height) / 1080.0f;
+	const float spacing = std::max((3.0f + 9.0f * amounts.detail_size) * scale / 6.0f, 0.5f);
+	blur_step(spacing / static_cast<float>(half_width), 0);
+	pass(guide_half_, "GuideH", half_width, half_height,
+	     {{params_.image, half}, {params_.image2, gs_texrender_get_texture(masks_[mask_])}});
+	// Stronger smoothing also flattens larger variations
+	gs_effect_set_float(params_.guide_eps, squared(0.04f + 0.06f * amounts.smoothing + 3.0f * noise));
+	blur_step(0, spacing / static_cast<float>(half_height));
+	pass(guide_, "GuideV", half_width, half_height, {{params_.image, gs_texrender_get_texture(guide_half_)}});
+	blur_step(spacing / static_cast<float>(half_width), 0);
+	pass(coefficients_half_, "Blur", half_width, half_height, {{params_.image, gs_texrender_get_texture(guide_)}});
+	blur_step(0, spacing / static_cast<float>(half_height));
+	pass(coefficients_, "Blur", half_width, half_height,
+	     {{params_.image, gs_texrender_get_texture(coefficients_half_)}});
+
+	// Wide base: the surrounding skin, for tone evening and glow
+	const float wide_spacing = std::max((1.0f + 1.5f * amounts.detail_size) * scale, 0.5f);
+	blur_step(wide_spacing / static_cast<float>(quarter_width), 0);
+	pass(wide_half_, "Blur", quarter_width, quarter_height, {{params_.image, quarter}});
+	blur_step(0, wide_spacing / static_cast<float>(quarter_height));
+	pass(wide_, "Blur", quarter_width, quarter_height, {{params_.image, gs_texrender_get_texture(wide_half_)}});
+
+	gs_enable_framebuffer_srgb(srgb);
+	gs_blend_state_pop();
+	processed_ = true;
+	composite(look, width, height);
+}
+
+gs_color_space BeautifyFilter::color_space(size_t count, const gs_color_space *preferred) const
+{
+	const gs_color_space potential[] = {GS_CS_SRGB, GS_CS_SRGB_16F, GS_CS_709_EXTENDED};
+	obs_source_t *target = obs_filter_get_target(context_);
+	const gs_color_space source = target ? obs_source_get_color_space(target, std::size(potential), potential)
+					     : GS_CS_SRGB;
+	gs_color_space space = source;
+	for (size_t index = 0; index < count; index++) {
+		space = preferred[index];
+		if (space == source)
+			break;
+	}
+	return space;
+}
+
+bool BeautifyFilter::capture(obs_source_t *target, obs_source_t *parent, uint32_t width, uint32_t height)
+{
+	gs_texrender_reset(input_);
+	gs_blend_state_push();
+	gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
+	const bool captured = gs_texrender_begin_with_color_space(input_, width, height, GS_CS_SRGB);
+	if (captured) {
+		vec4 clear;
+		vec4_zero(&clear);
+		gs_clear(GS_CLEAR_COLOR, &clear, 0.0f, 0);
+		gs_ortho(0.0f, static_cast<float>(width), 0.0f, static_cast<float>(height), -100.0f, 100.0f);
+		const uint32_t flags = obs_source_get_output_flags(target);
+		if (target == parent && !(flags & OBS_SOURCE_CUSTOM_DRAW) && !(flags & OBS_SOURCE_ASYNC))
+			obs_source_default_render(target);
+		else
+			obs_source_video_render(target);
+		gs_texrender_end(input_);
+	}
+	gs_blend_state_pop();
+	return captured;
+}
+
+void BeautifyFilter::pass(gs_texrender_t *target, const char *technique, uint32_t width, uint32_t height, Inputs inputs)
+{
+	gs_texrender_reset(target);
+	if (!gs_texrender_begin(target, width, height))
+		return;
+	gs_ortho(0.0f, static_cast<float>(width), 0.0f, static_cast<float>(height), -100.0f, 100.0f);
+	for (const auto &[param, texture] : inputs)
+		gs_effect_set_texture(param, texture);
+	while (gs_effect_loop(effect_, technique))
+		gs_draw_sprite(nullptr, 0, width, height);
+	gs_texrender_end(target);
+}
+
+void BeautifyFilter::blur_step(float x, float y)
+{
+	vec2 step;
+	vec2_set(&step, x, y);
+	gs_effect_set_vec2(params_.blur_step, &step);
+}
+
+void BeautifyFilter::measure(gs_texture_t *half, gs_texture_t *quarter, uint32_t half_width, uint32_t half_height)
+{
+	read_stats();
+	const uint32_t columns = kStatsColumns;
+	const auto rows = static_cast<uint32_t>(
+		std::clamp(std::lround(columns * static_cast<double>(half_height) / half_width), 4L, 64L));
+	vec2 step;
+	vec2_set(&step, 0.25f / static_cast<float>(columns), 0.25f / static_cast<float>(rows));
+	gs_effect_set_vec2(params_.block_step, &step);
+	pass(stats_, "Stats", columns, rows, {{params_.image, half}, {params_.image2, quarter}});
+	if (!stage_ || gs_stagesurface_get_width(stage_) != columns || gs_stagesurface_get_height(stage_) != rows) {
+		gs_stagesurface_destroy(stage_);
+		stage_ = gs_stagesurface_create(columns, rows, GS_RGBA32F);
+	}
+	if (stage_) {
+		gs_stage_texture(stage_, gs_texrender_get_texture(stats_));
+		staged_ = true;
+	}
+}
+
+void BeautifyFilter::read_stats()
+{
+	if (!staged_ || !stage_)
+		return;
+	staged_ = false;
+	uint8_t *data = nullptr;
+	uint32_t linesize = 0;
+	if (!gs_stagesurface_map(stage_, &data, &linesize))
+		return;
+	const uint32_t columns = gs_stagesurface_get_width(stage_);
+	const uint32_t rows = gs_stagesurface_get_height(stage_);
+	std::vector<BlockStats> blocks;
+	blocks.reserve(static_cast<size_t>(columns) * rows);
+	for (uint32_t y = 0; y < rows; y++) {
+		const auto row = reinterpret_cast<const float *>(data + static_cast<size_t>(y) * linesize);
+		for (uint32_t x = 0; x < columns; x++)
+			blocks.push_back({row[4 * x], row[4 * x + 1], row[4 * x + 2], row[4 * x + 3]});
+	}
+	gs_stagesurface_unmap(stage_);
+	model_.update(blocks, 1.0f - std::exp(-stats_seconds_ / kModelSeconds));
+	stats_seconds_ = 0;
+}
+
+void BeautifyFilter::composite(const Look &look, uint32_t width, uint32_t height)
+{
+	const BeautyAmounts &amounts = look.amounts;
+	const float noise = model_.noise();
+	gs_texture_t *input = gs_texrender_get_texture(input_);
+	gs_effect_set_texture(params_.image, input);
+	gs_effect_set_texture(params_.image2, gs_texrender_get_texture(coefficients_));
+	gs_effect_set_texture(params_.image3, gs_texrender_get_texture(wide_));
+	gs_effect_set_texture(params_.image4, gs_texrender_get_texture(half_));
+	gs_effect_set_float(params_.smoothing, amounts.smoothing);
+	gs_effect_set_float(params_.texture_keep, amounts.texture);
+	gs_effect_set_float(params_.evening, amounts.evening);
+	gs_effect_set_float(params_.sharpen, amounts.sharpen);
+	gs_effect_set_float(params_.glow, amounts.glow);
+	// Edge thresholds follow the noise, so low and high ISO give the same result
+	gs_effect_set_float(params_.keep_edge, 0.12f + 4.0f * noise);
+	gs_effect_set_float(params_.spot_depth, 0.25f);
+	gs_effect_set_float(params_.coring, 1.5f * noise);
+	gs_effect_set_float(params_.mask_view, look.show_mask ? 1.0f : 0.0f);
+	const bool srgb = gs_framebuffer_srgb_enabled();
+	gs_enable_framebuffer_srgb(false);
+	while (gs_effect_loop(effect_, "Composite"))
+		gs_draw_sprite(input, 0, width, height);
+	gs_enable_framebuffer_srgb(srgb);
+}
+
+bool user_style_selected(obs_data_t *settings)
+{
+	const std::vector<BeautyStyle> styles = user_styles();
+	return find_style(styles, obs_data_get_string(settings, kBeautyStyle)) != nullptr;
+}
+
+void show_advanced(obs_properties_t *properties, obs_data_t *settings)
+{
+	const bool advanced = obs_data_get_bool(settings, kAdvanced);
+	for (const char *key : kBeautyKeys)
+		obs_property_set_visible(obs_properties_get(properties, key), advanced);
+	obs_property_set_visible(obs_properties_get(properties, kBeautyShowMask), advanced);
+	obs_property_set_visible(obs_properties_get(properties, kSaveStyle), advanced);
+	obs_property_set_visible(obs_properties_get(properties, kDeleteStyle),
+				 advanced && user_style_selected(settings));
+}
+
+bool advanced_modified(obs_properties_t *properties, obs_property_t *, obs_data_t *settings)
+{
+	show_advanced(properties, settings);
+	return true;
+}
+
+// Choosing a style shows its values
+bool style_modified(obs_properties_t *properties, obs_property_t *, obs_data_t *settings)
+{
+	const std::vector<BeautyStyle> styles = all_styles();
+	if (const BeautyStyle *style = find_style(styles, obs_data_get_string(settings, kBeautyStyle)))
+		set_beauty_values(settings, style->values);
+	show_advanced(properties, settings);
+	return true;
+}
+
+// Moving an advanced slider away from the style's value makes the style Custom
+bool value_modified(obs_properties_t *, obs_property_t *, obs_data_t *settings)
+{
+	const std::vector<BeautyStyle> styles = all_styles();
+	const BeautyStyle *style = find_style(styles, obs_data_get_string(settings, kBeautyStyle));
+	if (!style || style->values == beauty_values(settings))
+		return false;
+	obs_data_set_string(settings, kBeautyStyle, kCustomStyle);
+	return true;
+}
+
+bool save_style_clicked(obs_properties_t *, obs_property_t *, void *data)
+{
+	auto filter = static_cast<BeautifyFilter *>(data);
+	const std::string name = beautify_actions.ask_style_name ? beautify_actions.ask_style_name() : std::string();
+	if (name.empty())
+		return false;
+	OBSDataAutoRelease settings = obs_source_get_settings(filter->context());
+	if (!save_user_style(name, beauty_values(settings)))
+		return false;
+	obs_data_set_string(settings, kBeautyStyle, name.c_str());
+	obs_source_update(filter->context(), settings);
+	return true;
+}
+
+bool delete_style_clicked(obs_properties_t *, obs_property_t *, void *data)
+{
+	auto filter = static_cast<BeautifyFilter *>(data);
+	OBSDataAutoRelease settings = obs_source_get_settings(filter->context());
+	const std::string name = obs_data_get_string(settings, kBeautyStyle);
+	if (!user_style_selected(settings) ||
+	    (beautify_actions.confirm_delete_style && !beautify_actions.confirm_delete_style(name)))
+		return false;
+	delete_user_style(name);
+	// The filter keeps the values
+	obs_data_set_string(settings, kBeautyStyle, kCustomStyle);
+	obs_source_update(filter->context(), settings);
+	return true;
+}
+
+const char *beautify_get_name(void *)
+{
+	return obs_module_text("Beautify.Name");
+}
+
+void *beautify_create(obs_data_t *settings, obs_source_t *source)
+{
+	return new BeautifyFilter(source, settings);
+}
+
+void beautify_destroy(void *data)
+{
+	delete static_cast<BeautifyFilter *>(data);
+}
+
+void beautify_update(void *data, obs_data_t *settings)
+{
+	static_cast<BeautifyFilter *>(data)->update(settings);
+}
+
+void beautify_tick(void *data, float seconds)
+{
+	static_cast<BeautifyFilter *>(data)->tick(seconds);
+}
+
+void beautify_render(void *data, gs_effect_t *)
+{
+	static_cast<BeautifyFilter *>(data)->render();
+}
+
+gs_color_space beautify_color_space(void *data, size_t count, const gs_color_space *preferred)
+{
+	return static_cast<BeautifyFilter *>(data)->color_space(count, preferred);
+}
+
+void beautify_defaults(obs_data_t *settings)
+{
+	obs_data_set_default_string(settings, kBeautyStyle, kDefaultStyle);
+	obs_data_set_default_int(settings, kBeautyStrength, kDefaultBeautyStrength);
+	if (const BeautyStyle *style = find_style(builtin_styles(), kDefaultStyle))
+		for (size_t index = 0; index < kBeautyKeys.size(); index++)
+			obs_data_set_default_int(settings, kBeautyKeys[index], beauty_value(style->values, index));
+}
+
+obs_properties_t *beautify_properties(void *data)
+{
+	obs_properties_t *properties = obs_properties_create();
+	obs_property_t *style = obs_properties_add_list(properties, kBeautyStyle, obs_module_text("Beautify.Style"),
+							OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+	obs_property_set_long_description(style, obs_module_text("Beautify.Style.Tooltip"));
+	for (const BeautyStyle &item : all_styles()) {
+		const std::string name = item.builtin ? obs_module_text(("Beautify.Style." + item.id).c_str())
+						      : item.id;
+		obs_property_list_add_string(style, name.c_str(), item.id.c_str());
+	}
+	obs_property_list_add_string(style, obs_module_text("Beautify.Style.Custom"), kCustomStyle);
+	obs_property_set_modified_callback(style, style_modified);
+
+	obs_property_t *strength = obs_properties_add_int_slider(properties, kBeautyStrength,
+								 obs_module_text("Beautify.Strength"), 0, 100, 1);
+	obs_property_set_long_description(strength, obs_module_text("Beautify.Strength.Tooltip"));
+
+	obs_property_t *advanced = obs_properties_add_bool(properties, kAdvanced, obs_module_text("Beautify.Advanced"));
+	obs_property_set_long_description(advanced, obs_module_text("Beautify.Advanced.Tooltip"));
+	obs_property_set_modified_callback(advanced, advanced_modified);
+
+	for (size_t index = 0; index < kBeautyKeys.size(); index++) {
+		obs_property_t *value = obs_properties_add_int_slider(properties, kBeautyKeys[index],
+								      obs_module_text(kValueNames[index]), 0, 100, 1);
+		obs_property_set_long_description(
+			value, obs_module_text((std::string(kValueNames[index]) + ".Tooltip").c_str()));
+		obs_property_set_modified_callback(value, value_modified);
+	}
+	obs_property_t *mask =
+		obs_properties_add_bool(properties, kBeautyShowMask, obs_module_text("Beautify.ShowMask"));
+	obs_property_set_long_description(mask, obs_module_text("Beautify.ShowMask.Tooltip"));
+	obs_property_t *save = obs_properties_add_button2(properties, kSaveStyle, obs_module_text("Beautify.SaveStyle"),
+							  save_style_clicked, data);
+	obs_property_set_long_description(save, obs_module_text("Beautify.SaveStyle.Tooltip"));
+	obs_property_t *remove = obs_properties_add_button2(
+		properties, kDeleteStyle, obs_module_text("Beautify.DeleteStyle"), delete_style_clicked, data);
+	obs_property_set_long_description(remove, obs_module_text("Beautify.DeleteStyle.Tooltip"));
+	return properties;
+}
+
+} // namespace
+
+void register_beautify_filter()
+{
+	obs_source_info info = {};
+	info.id = kBeautifyFilterId;
+	info.type = OBS_SOURCE_TYPE_FILTER;
+	info.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_SRGB;
+	info.get_name = beautify_get_name;
+	info.create = beautify_create;
+	info.destroy = beautify_destroy;
+	info.update = beautify_update;
+	info.get_defaults = beautify_defaults;
+	info.get_properties = beautify_properties;
+	info.video_tick = beautify_tick;
+	info.video_render = beautify_render;
+	info.video_get_color_space = beautify_color_space;
+	obs_register_source(&info);
+}
+
+void set_beautify_actions(BeautifyActions actions)
+{
+	beautify_actions = std::move(actions);
+}
+
+bool is_beautify_filter(obs_source_t *source)
+{
+	const char *id = source ? obs_source_get_unversioned_id(source) : nullptr;
+	return id && std::strcmp(id, kBeautifyFilterId) == 0;
+}
+
+obs_source_t *find_beautify_filter(obs_source_t *source)
+{
+	obs_source_t *found = nullptr;
+	obs_source_enum_filters(
+		source,
+		[](obs_source_t *, obs_source_t *filter, void *param) {
+			auto found = static_cast<obs_source_t **>(param);
+			if (!*found && is_beautify_filter(filter))
+				*found = obs_source_get_ref(filter);
+		},
+		&found);
+	return found;
+}
+
+obs_source_t *add_beautify_filter(obs_source_t *source, const std::string &style, int strength)
+{
+	OBSDataAutoRelease settings = obs_data_create();
+	const std::vector<BeautyStyle> styles = all_styles();
+	if (const BeautyStyle *chosen = find_style(styles, style))
+		select_style(settings, *chosen);
+	obs_data_set_int(settings, kBeautyStrength, strength);
+	// Filter names are unique per source
+	std::string name = obs_module_text("Beautify.Name");
+	for (int number = 2;; number++) {
+		OBSSourceAutoRelease existing = obs_source_get_filter_by_name(source, name.c_str());
+		if (!existing)
+			break;
+		name = std::string(obs_module_text("Beautify.Name")) + " " + std::to_string(number);
+	}
+	obs_source_t *filter = obs_source_create(kBeautifyFilterId, name.c_str(), settings, nullptr);
+	if (filter)
+		obs_source_filter_add(source, filter);
+	return filter;
+}
+
+BeautyValues beauty_values(obs_data_t *settings)
+{
+	BeautyValues values;
+	for (size_t index = 0; index < kBeautyKeys.size(); index++)
+		beauty_value(values, index) =
+			std::clamp(static_cast<int>(obs_data_get_int(settings, kBeautyKeys[index])), 0, 100);
+	return values;
+}
+
+void set_beauty_values(obs_data_t *settings, const BeautyValues &values)
+{
+	for (size_t index = 0; index < kBeautyKeys.size(); index++)
+		obs_data_set_int(settings, kBeautyKeys[index], beauty_value(values, index));
+}
+
+void select_style(obs_data_t *settings, const BeautyStyle &style)
+{
+	obs_data_set_string(settings, kBeautyStyle, style.id.c_str());
+	set_beauty_values(settings, style.values);
+}
+
+} // namespace bmagicam

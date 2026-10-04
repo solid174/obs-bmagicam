@@ -1,0 +1,297 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 solid174
+
+// Beautify: skin retouching in passes, described in docs/architecture.md, "Beautify". Colors are processed as
+// encoded, like a retouching tool does. Luma and chroma are Rec. 709.
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d image2;
+uniform texture2d image3;
+uniform texture2d image4;
+
+// Blur passes: the distance between taps, in texture coordinates
+uniform float2 blur_step;
+// Statistics: the distance between samples inside one block
+uniform float2 block_step;
+// The size of one pixel of the pass's input, in texture coordinates
+uniform float2 texel;
+
+// Skin mask: the skin's chroma, the inverse variances of the log saturation ratio (x) and of the hue angle (y)
+// against it, and how much of the new mask replaces the previous frame's
+uniform float2 skin_chroma;
+uniform float2 skin_spread;
+uniform float mask_blend;
+
+// Guided filter: variances below about this are smoothed, larger ones are edges
+uniform float guide_eps;
+
+// Composite
+uniform float smoothing;
+uniform float texture_keep;
+uniform float evening;
+uniform float sharpen;
+uniform float glow;
+uniform float keep_edge;
+uniform float spot_depth;
+uniform float coring;
+uniform float mask_view;
+
+sampler_state linearClamp {
+	Filter = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in)
+{
+	VertData vert_out;
+	vert_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	vert_out.uv = v_in.uv;
+	return vert_out;
+}
+
+float luma(float3 c)
+{
+	return dot(c, float3(0.2126, 0.7152, 0.0722));
+}
+
+float2 chroma(float3 c, float y)
+{
+	return float2((c.b - y) / 1.8556, (c.r - y) / 1.5748);
+}
+
+float3 rgb_of(float y, float2 cc)
+{
+	float r = y + 1.5748 * cc.y;
+	float b = y + 1.8556 * cc.x;
+	return float3(r, (y - 0.2126 * r - 0.0722 * b) / 0.7152, b);
+}
+
+// Gaussian weight of tap i of 13, sigma 3 taps
+float tap_weight(int i)
+{
+	return exp(-float(i * i) / 18.0);
+}
+
+// Half or quarter resolution: one bilinear tap averages the 2×2 pixels below; luma goes into alpha
+float4 PSDownsample(VertData v_in) : TARGET
+{
+	float3 c = image.Sample(linearClamp, v_in.uv).rgb;
+	return float4(c, luma(c));
+}
+
+// Skin likelihood from hue and saturation against the skin's, gated by luma, and blended with the previous
+// frame's mask so nothing flickers. Saturation is compared as a ratio, so it holds at every exposure.
+float4 PSMask(VertData v_in) : TARGET
+{
+	float4 h = image.Sample(linearClamp, v_in.uv);
+	float2 cc = chroma(h.rgb, h.a);
+	float saturation = log(max(length(cc), 0.0005) / length(skin_chroma));
+	float hue = atan2(cc.x * skin_chroma.y - cc.y * skin_chroma.x, dot(cc, skin_chroma));
+	// Colors less saturated than the skin, such as gray hair, teeth and white walls, count as skin less readily
+	float saturation_spread = saturation < 0.0 ? skin_spread.x * 1.8 : skin_spread.x;
+	float likelihood = exp(-0.5 * (saturation * saturation * saturation_spread + hue * hue * skin_spread.y));
+	float gate = smoothstep(0.05, 0.15, h.a) * (1.0 - smoothstep(0.93, 0.995, h.a));
+	// Fine texture such as hair, lashes and brows is no skin, whatever its color (BEA-4). Only the finest scale
+	// counts, so the face's outline costs the mask a thin line, not a band.
+	float2 sum = float2(0.0, 0.0);
+	for (int j = -1; j <= 1; j++) {
+		for (int i = -1; i <= 1; i++) {
+			float y = image.Sample(linearClamp, v_in.uv + float2(float(i), float(j)) * texel).a;
+			sum += float2(y, y * y);
+		}
+	}
+	sum /= 9.0;
+	float texture_amount = sqrt(max(sum.y - sum.x * sum.x, 0.0));
+	gate *= 1.0 - smoothstep(0.035, 0.07, texture_amount);
+	float raw = smoothstep(0.12, 0.6, likelihood) * gate;
+	float previous = image2.Sample(linearClamp, v_in.uv).r;
+	float m = lerp(previous, raw, mask_blend);
+	return float4(m, m, m, m);
+}
+
+// Guided filter, first half: horizontal means of luma, luma squared and the mask
+float4 PSGuideH(VertData v_in) : TARGET
+{
+	float3 sum = float3(0.0, 0.0, 0.0);
+	float total = 0.0;
+	for (int i = -6; i <= 6; i++) {
+		float w = tap_weight(i);
+		float2 uv = v_in.uv + blur_step * float(i);
+		float y = image.Sample(linearClamp, uv).a;
+		float m = image2.Sample(linearClamp, uv).r;
+		sum += w * float3(y, y * y, m);
+		total += w;
+	}
+	return float4(sum / total, 1.0);
+}
+
+// Guided filter, second half: vertical means, then the coefficients a and b of q = a × luma + b
+float4 PSGuideV(VertData v_in) : TARGET
+{
+	float3 sum = float3(0.0, 0.0, 0.0);
+	float total = 0.0;
+	for (int i = -6; i <= 6; i++) {
+		float w = tap_weight(i);
+		sum += w * image.Sample(linearClamp, v_in.uv + blur_step * float(i)).rgb;
+		total += w;
+	}
+	float3 mean = sum / total;
+	float variance = max(mean.y - mean.x * mean.x, 0.0);
+	float a = variance / (variance + guide_eps);
+	return float4(a, (1.0 - a) * mean.x, mean.z, 1.0);
+}
+
+// One direction of a 13-tap Gaussian blur
+float4 PSBlur(VertData v_in) : TARGET
+{
+	float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+	float total = 0.0;
+	for (int i = -6; i <= 6; i++) {
+		float w = tap_weight(i);
+		sum += w * image.Sample(linearClamp, v_in.uv + blur_step * float(i));
+		total += w;
+	}
+	return sum / total;
+}
+
+// How skin-like a color is, broadly: near the skin-tone line, about as saturated as skin usually is, neither dark
+// nor bright. Large near-gray or vivid areas, such as a warm backdrop or orange clothes, count little.
+float skin_prior(float2 cc, float y)
+{
+	float angle = (atan2(cc.y, cc.x) - 2.15) / 0.4;
+	float saturation = log(max(length(cc), 0.0005) / 0.09) / 0.45;
+	return exp(-0.5 * (angle * angle + saturation * saturation)) * smoothstep(0.1, 0.2, y) *
+	       (1.0 - smoothstep(0.9, 0.97, y));
+}
+
+// Statistics of one block, read back for the skin model: the skin-like samples' mean chroma, how skin-like the
+// block is, and the small-scale detail of its mid-tones, which in flat blocks is the noise
+float4 PSStats(VertData v_in) : TARGET
+{
+	float3 skin = float3(0.0, 0.0, 0.0);
+	float2 detail = float2(0.0, 0.0);
+	for (int j = 0; j < 4; j++) {
+		for (int i = 0; i < 4; i++) {
+			float2 uv = v_in.uv + (float2(float(i), float(j)) - 1.5) * block_step;
+			float4 h = image.Sample(linearClamp, uv);
+			float2 cc = chroma(h.rgb, h.a);
+			float w = skin_prior(cc, h.a);
+			skin += float3(w * cc, w);
+			float g = smoothstep(0.12, 0.2, h.a) * (1.0 - smoothstep(0.85, 0.95, h.a));
+			detail += float2(g * abs(h.a - image2.Sample(linearClamp, uv).a), g);
+		}
+	}
+	float measured = detail.x / max(detail.y, 0.0001);
+	return float4(skin.xy / max(skin.z, 0.0001), skin.z / 16.0, lerp(-1.0, measured, step(0.5, detail.y)));
+}
+
+// The retouched picture at full resolution
+float4 PSComposite(VertData v_in) : TARGET
+{
+	float4 source = image.Sample(linearClamp, v_in.uv);
+	float3 c = source.rgb;
+	float y = luma(c);
+	float4 guide = image2.Sample(linearClamp, v_in.uv);
+	float4 wide = image3.Sample(linearClamp, v_in.uv);
+	float half_luma = image4.Sample(linearClamp, v_in.uv).a;
+	float m = saturate(guide.b);
+
+	// Smoothing: small detail on skin is flattened, large detail such as lashes and the lip line stays, and
+	// texture keeps a share of the finest grain
+	float base = guide.r * y + guide.g;
+	float detail = y - base;
+	float grain = y - half_luma;
+	float keep = smoothstep(keep_edge * 0.6, keep_edge * 1.4, abs(detail));
+	float result_luma = y - m * smoothing * (1.0 - keep) * (detail - texture_keep * grain);
+
+	// Tone evening: small dark spots are lifted towards the surrounding skin, and its chroma evens redness.
+	// Large shadows are dark in the surrounding skin too, so they stay.
+	float spot = min(max(wide.a - result_luma, 0.0), spot_depth);
+	result_luma += m * evening * spot * 0.7;
+	float2 cc = lerp(chroma(c, y), chroma(wide.rgb, wide.a), m * evening * 0.5);
+
+	// Sharpening of what is not skin
+	float crisp = grain + 0.5 * detail;
+	crisp = sign(crisp) * max(abs(crisp) - coring, 0.0);
+	result_luma += (1.0 - m) * sharpen * crisp;
+
+	// Glow: a soft bloom on skin highlights
+	float3 result = saturate(rgb_of(result_luma, cc));
+	float bloom = m * glow * smoothstep(0.55, 0.95, wide.a) * 0.4;
+	result = 1.0 - (1.0 - result) * (1.0 - bloom * wide.rgb);
+
+	// Show mask: what is treated as skin, over a dimmed picture
+	float3 dim = lerp(float3(y, y, y), c, 0.35) * 0.6;
+	float3 shown = lerp(dim, float3(1.0, 0.3, 0.5), m * 0.75);
+	return float4(lerp(result, shown, mask_view), source.a);
+}
+
+technique Downsample
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader = PSDownsample(v_in);
+	}
+}
+
+technique Mask
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader = PSMask(v_in);
+	}
+}
+
+technique GuideH
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader = PSGuideH(v_in);
+	}
+}
+
+technique GuideV
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader = PSGuideV(v_in);
+	}
+}
+
+technique Blur
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader = PSBlur(v_in);
+	}
+}
+
+technique Stats
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader = PSStats(v_in);
+	}
+}
+
+technique Composite
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader = PSComposite(v_in);
+	}
+}
