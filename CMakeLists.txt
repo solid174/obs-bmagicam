@@ -76,6 +76,8 @@ target_sources(
     src/camera/stream-presets.hpp
     src/camera/streaming-xml.cpp
     src/camera/streaming-xml.hpp
+    src/discovery/phone-browser.cpp
+    src/discovery/phone-browser.hpp
     src/filter/beautify-filter.cpp
     src/filter/beautify-filter.hpp
     src/phone/camera-client.cpp
@@ -95,6 +97,19 @@ target_sources(
     src/ui/frontend.cpp
     src/ui/frontend.hpp
 )
+
+# Each system has its own DNS-SD service for finding phones
+if(OS_MACOS)
+  target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/discovery/browser-macos.cpp)
+elseif(OS_WINDOWS)
+  target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/discovery/browser-windows.cpp)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE dnsapi)
+else()
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(Avahi REQUIRED IMPORTED_TARGET avahi-client)
+  target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/discovery/browser-avahi.cpp)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE PkgConfig::Avahi)
+endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 

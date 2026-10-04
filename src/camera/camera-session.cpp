@@ -6,6 +6,7 @@
 #include "network.hpp"
 #include "stream-presets.hpp"
 #include "streaming-xml.hpp"
+#include "../discovery/phone-browser.hpp"
 #include "../phone/camera-client.hpp"
 #include "../stream/ffmpeg-check.hpp"
 
@@ -16,7 +17,9 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <cstdio>
 #include <condition_variable>
 #include <iterator>
 #include <mutex>
@@ -139,7 +142,18 @@ bool operator==(const StreamReceiver::Settings &a, const StreamReceiver::Setting
 
 bool operator==(const CameraSession::Settings &a, const CameraSession::Settings &b)
 {
-	return a.address == b.address && a.preset == b.preset && a.receiver == b.receiver;
+	return a.phone_id == b.phone_id && a.phone_name == b.phone_name && a.address == b.address &&
+	       a.preset == b.preset && a.receiver == b.receiver;
+}
+
+// Remote control arrived in Blackmagic Camera 3.4
+bool supports_remote_control(const std::string &version)
+{
+	int major = 0;
+	int minor = 0;
+	if (std::sscanf(version.c_str(), "%d.%d", &major, &minor) < 2)
+		return true;
+	return major > 3 || (major == 3 && minor >= 4);
 }
 
 } // namespace
@@ -161,10 +175,12 @@ struct CameraSession::Core final : StreamReceiver::Sink {
 	bool ending = false;
 	bool phone_connected = false;
 	bool stream_lost = false;
+	bool phones_changed = false;
 	Status status;
 
-	// Only used by the session's thread: what it changed on a phone, to undo
+	// Only used by the session's thread: what it changed on which phone, to undo
 	std::string changed_phone;
+	std::string changed_phone_key;
 	std::string changed_platform;
 	bool phone_streaming = false;
 	bool receiving = false;
@@ -276,19 +292,16 @@ void CameraSession::Core::run()
 		const bool shown = active;
 		lock.unlock();
 
-		if (current.address.empty() || !shown) {
+		const bool no_phone = current.phone_id.empty() && current.address.empty();
+		if (no_phone || !shown) {
 			if (!changed_phone.empty() && phone_streaming)
 				stop_phone_stream(CameraClient(changed_phone));
 			stop_receiving();
-			set_status(current.address.empty() ? State::NoPhone : State::Paused);
+			set_status(no_phone ? State::NoPhone : State::Paused);
 			lock.lock();
 			cv.wait(lock, [&] { return ending || generation != current_generation || active != shown; });
 			continue;
 		}
-
-		// A different phone than before gets the previous one put back first
-		if (!changed_phone.empty() && changed_phone != current.address)
-			put_phone_back();
 
 		const bool ended_well = stream(current, current_generation);
 		lock.lock();
@@ -296,8 +309,11 @@ void CameraSession::Core::run()
 			failures = 0;
 			continue;
 		}
+		// Retry after a pause, or as soon as Bonjour sees the phone again
 		const auto pause = kRetryPauses[std::min(failures++, std::size(kRetryPauses) - 1)];
-		cv.wait_for(lock, pause, [&] { return ending || generation != current_generation || !active; });
+		phones_changed = false;
+		cv.wait_for(lock, pause,
+			    [&] { return ending || generation != current_generation || !active || phones_changed; });
 	}
 	lock.unlock();
 
@@ -311,7 +327,24 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 		return ending || generation != current_generation || !active;
 	};
 
-	const CameraClient client(settings.address);
+	// A phone chosen from the list is found by its ID, wherever its address moved to
+	std::string address = settings.address;
+	if (!settings.phone_id.empty()) {
+		FoundPhone found;
+		if (!PhoneBrowser::instance().find(settings.phone_id, found)) {
+			set_phone(settings.phone_name);
+			set_status(State::Searching);
+			return false;
+		}
+		address = found.address;
+	}
+	const std::string phone_key = settings.phone_id.empty() ? address : settings.phone_id;
+
+	// A different phone than before gets the previous one put back first
+	if (!changed_phone.empty() && changed_phone_key != phone_key)
+		put_phone_back();
+
+	const CameraClient client(address);
 	set_status(State::Connecting);
 
 	const ApiReply product = client.get("/system/product");
@@ -322,6 +355,10 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 	const std::string name = string_at(product.body, "productName");
 	const std::string letter = string_at(product.body, "deviceName");
 	set_phone(letter.empty() ? name : name + " (" + letter + ")");
+	if (!supports_remote_control(string_at(product.body, "softwareVersion"))) {
+		set_status(State::Error, Problem::Outdated);
+		return false;
+	}
 
 	const std::string availability = string_at(client.get("/access/status").body, "availability");
 	if (!availability.empty() && availability != "control-and-monitor") {
@@ -330,7 +367,7 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 	}
 
 	set_status(State::Starting);
-	const std::string local_address = local_address_toward(settings.address);
+	const std::string local_address = local_address_toward(address);
 	if (local_address.empty()) {
 		set_status(State::Error, Problem::NotAnswering);
 		return false;
@@ -356,8 +393,9 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 	// Keep the phone's own destination before choosing this one
 	const ApiReply current = client.get("/livestreams/0/activePlatform");
 	if (current.ok() && string_at(current.body, "platform") != platform)
-		SavedDestinations::save(settings.address, current.body);
-	changed_phone = settings.address;
+		SavedDestinations::save(phone_key, current.body);
+	changed_phone = address;
+	changed_phone_key = phone_key;
 	changed_platform = platform;
 
 	// The stream follows the camera's video format, so the preset sets it
@@ -469,17 +507,27 @@ void CameraSession::Core::put_phone_back()
 	stop_phone_stream(client);
 
 	// A phone that is gone keeps the saved destination for the next time
-	const nlohmann::json previous = SavedDestinations::get(changed_phone);
+	const nlohmann::json previous = SavedDestinations::get(changed_phone_key);
 	if (previous.is_object() && client.put("/livestreams/0/activePlatform", previous).ok()) {
-		SavedDestinations::forget(changed_phone);
+		SavedDestinations::forget(changed_phone_key);
 		client.remove("/livestreams/customPlatforms/" + url_path_segment(changed_platform));
 	}
 	changed_phone.clear();
+	changed_phone_key.clear();
 	changed_platform.clear();
 }
 
 CameraSession::CameraSession(Output &output, StreamReceiver::Clock clock) : core_(std::make_shared<Core>(output, clock))
 {
+	discovery_listener_ = PhoneBrowser::instance().listen([weak = std::weak_ptr<Core>(core_)] {
+		if (const std::shared_ptr<Core> core = weak.lock()) {
+			{
+				std::lock_guard lock(core->mutex);
+				core->phones_changed = true;
+			}
+			core->cv.notify_all();
+		}
+	});
 	{
 		std::lock_guard lock(running_mutex);
 		running_sessions++;
@@ -496,6 +544,7 @@ CameraSession::CameraSession(Output &output, StreamReceiver::Clock clock) : core
 
 CameraSession::~CameraSession()
 {
+	PhoneBrowser::instance().unlisten(discovery_listener_);
 	{
 		std::lock_guard lock(core_->output_mutex);
 		core_->output = nullptr;

@@ -42,6 +42,7 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)deps]}) )) {
     build-essential \
     libavcodec-dev \
     libavformat-dev \
+    libavahi-client-dev \
     libavutil-dev \
     libgles2-mesa-dev \
     libmbedtls-dev \

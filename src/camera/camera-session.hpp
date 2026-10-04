@@ -20,8 +20,10 @@ namespace bmagicam {
 class CameraSession {
 public:
 	enum class State {
-		// No phone address set
+		// No phone chosen
 		NoPhone,
+		// The chosen phone is not on the network
+		Searching,
 		Connecting,
 		Starting,
 		Live,
@@ -42,6 +44,8 @@ public:
 		Unavailable,
 		// The phone refused a step of the setup; the step is in Status::detail
 		Refused,
+		// Blackmagic Camera is older than 3.4, which brought remote control
+		Outdated,
 		// The FFmpeg in OBS cannot run the receiver
 		FFmpeg,
 	};
@@ -55,6 +59,11 @@ public:
 	};
 
 	struct Settings {
+		// The phone's device_id as Bonjour announces it; empty to use the address instead
+		std::string phone_id;
+		// Shown while the phone is looked for
+		std::string phone_name;
+		// Entered by hand, when there is no phone_id
 		std::string address;
 		std::string preset;
 		StreamReceiver::Settings receiver;
@@ -89,6 +98,7 @@ public:
 private:
 	struct Core;
 	std::shared_ptr<Core> core_;
+	int discovery_listener_ = 0;
 };
 
 } // namespace bmagicam

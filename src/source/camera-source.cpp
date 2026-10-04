@@ -5,6 +5,7 @@
 
 #include "../camera/camera-session.hpp"
 #include "../camera/stream-presets.hpp"
+#include "../discovery/phone-browser.hpp"
 
 #include <obs-module.h>
 #include <plugin-support.h>
@@ -24,6 +25,9 @@ namespace bmagicam {
 namespace {
 
 constexpr const char *kStatus = "status";
+constexpr const char *kPhone = "phone";
+constexpr const char *kPhoneName = "phone_name";
+constexpr const char *kManual = "manual";
 constexpr const char *kAddress = "address";
 constexpr const char *kPreset = "preset";
 constexpr const char *kPort = "port";
@@ -126,6 +130,8 @@ std::string status_text(const CameraSession::Status &status)
 	switch (status.state) {
 	case CameraSession::State::NoPhone:
 		return obs_module_text("Status.NoPhone");
+	case CameraSession::State::Searching:
+		return obs_module_text("Status.Searching");
 	case CameraSession::State::Connecting:
 		return obs_module_text("Status.Connecting");
 	case CameraSession::State::Starting:
@@ -149,6 +155,8 @@ std::string status_text(const CameraSession::Status &status)
 		return std::string(obs_module_text("Status.Unavailable")) + " (" + status.detail + ")";
 	case CameraSession::Problem::Refused:
 		return obs_module_text("Status.Refused");
+	case CameraSession::Problem::Outdated:
+		return obs_module_text("Status.Outdated");
 	case CameraSession::Problem::FFmpeg:
 		return obs_module_text("Status.FFmpeg");
 	case CameraSession::Problem::None:
@@ -161,10 +169,17 @@ class CameraSource final : public CameraSession::Output {
 public:
 	CameraSource(obs_source_t *source, obs_data_t *settings) : source_(source), session_(*this, os_gettime_ns)
 	{
+		// New phones appear in an open properties window
+		discovery_listener_ =
+			PhoneBrowser::instance().listen([source] { obs_source_update_properties(source); });
 		update(settings);
 	}
 
-	~CameraSource() override { Ports::release(port_); }
+	~CameraSource() override
+	{
+		PhoneBrowser::instance().unlisten(discovery_listener_);
+		Ports::release(port_);
+	}
 
 	void update(obs_data_t *settings);
 	void set_shown(bool shown) { session_.set_active(shown); }
@@ -177,6 +192,7 @@ public:
 
 private:
 	obs_source_t *source_;
+	int discovery_listener_ = 0;
 	int port_ = 0;
 	bool logged_format_ = false;
 	// Last, so that it ends first and stops calling back into this object
@@ -188,7 +204,13 @@ void CameraSource::update(obs_data_t *settings)
 	port_ = Ports::take(static_cast<int>(obs_data_get_int(settings, kPort)), port_);
 
 	CameraSession::Settings next;
-	next.address = obs_data_get_string(settings, kAddress);
+	const std::string phone = obs_data_get_string(settings, kPhone);
+	if (phone == kManual) {
+		next.address = obs_data_get_string(settings, kAddress);
+	} else {
+		next.phone_id = phone;
+		next.phone_name = obs_data_get_string(settings, kPhoneName);
+	}
 	next.preset = obs_data_get_string(settings, kPreset);
 	next.receiver.port = port_;
 	next.receiver.latency_ms = static_cast<int>(obs_data_get_int(settings, kLatency));
@@ -288,11 +310,41 @@ void camera_defaults(obs_data_t *settings)
 	obs_data_set_default_bool(settings, kHardwareDecoding, true);
 }
 
+// Keeps the chosen phone's name for the "looking for" status, and shows the address field only for an address
+bool phone_modified(obs_properties_t *properties, obs_property_t *list, obs_data_t *settings)
+{
+	const std::string id = obs_data_get_string(settings, kPhone);
+	FoundPhone found;
+	if (id != kManual && PhoneBrowser::instance().find(id, found))
+		obs_data_set_string(settings, kPhoneName, found.name.c_str());
+
+	// A phone chosen before but not on the network now stays in the list, so the choice is not lost
+	bool listed = id.empty() || id == kManual;
+	for (size_t i = 0; !listed && i < obs_property_list_item_count(list); i++)
+		listed = id == obs_property_list_item_string(list, i);
+	if (!listed) {
+		const std::string name = obs_data_get_string(settings, kPhoneName);
+		const std::string label = (name.empty() ? id : name) + " · " + obs_module_text("Camera.Phone.NotFound");
+		obs_property_list_insert_string(list, 0, label.c_str(), id.c_str());
+	}
+
+	obs_property_set_visible(obs_properties_get(properties, kAddress), id == kManual);
+	return true;
+}
+
 obs_properties_t *camera_properties(void *data)
 {
 	obs_properties_t *properties = obs_properties_create();
 	if (data)
 		static_cast<const CameraSource *>(data)->add_status(properties);
+
+	obs_property_t *phone = obs_properties_add_list(properties, kPhone, obs_module_text("Camera.Phone"),
+							OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+	obs_property_set_long_description(phone, obs_module_text("Camera.Phone.Tooltip"));
+	for (const FoundPhone &found : PhoneBrowser::instance().phones())
+		obs_property_list_add_string(phone, (found.name + " · " + found.address).c_str(), found.id.c_str());
+	obs_property_list_add_string(phone, obs_module_text("Camera.Phone.Manual"), kManual);
+	obs_property_set_modified_callback(phone, phone_modified);
 
 	obs_property_t *address =
 		obs_properties_add_text(properties, kAddress, obs_module_text("Camera.Address"), OBS_TEXT_DEFAULT);
