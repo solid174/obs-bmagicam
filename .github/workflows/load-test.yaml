@@ -26,8 +26,9 @@ jobs:
           sudo apt-get install --yes --no-install-recommends obs-studio xvfb
           sudo apt-get install --yes "$(find "${RUNNER_TEMP}/artifacts" -name '*-x86_64-linux-gnu.deb')"
 
-          mkdir -p ~/.config/obs-studio
+          mkdir -p ~/.config/obs-studio/basic/scenes
           printf '[General]\nFirstRun=true\n' > ~/.config/obs-studio/user.ini
+          cp .github/scripts/load-test-scenes.json ~/.config/obs-studio/basic/scenes/Untitled.json
 
       - name: Start OBS 🚀
         run: .github/scripts/load-test ~/.config/obs-studio/logs obs xvfb-run --auto-servernum obs --disable-missing-files-check
@@ -63,15 +64,24 @@ jobs:
           installer -pkg "$(find "${RUNNER_TEMP}/artifacts" -name '*-macos-universal.pkg')" -target CurrentUserHomeDirectory
 
           local config_dir=~/Library/Application\ Support/obs-studio
-          mkdir -p "${config_dir}"
+          mkdir -p "${config_dir}/basic/scenes"
           printf '[General]\nMacOSPermissionsDialogLastShown=1\n' > "${config_dir}/global.ini"
           printf '[General]\nFirstRun=true\n' > "${config_dir}/user.ini"
+          cp .github/scripts/load-test-scenes.json "${config_dir}/basic/scenes/Untitled.json"
 
       - name: Start OBS 🚀
         run: |
           : Start OBS 🚀
           .github/scripts/load-test ~/Library/Application\ Support/obs-studio/logs OBS \
             "${RUNNER_TEMP}/obs/OBS.app/Contents/MacOS/OBS" --disable-updater --disable-missing-files-check
+
+      - name: Start OBS with the Metal Renderer 🚀
+        run: |
+          : Start OBS with the Metal Renderer 🚀
+          printf '[Video]\nRenderer=Metal\n' >> ~/Library/Application\ Support/obs-studio/global.ini
+          .github/scripts/load-test ~/Library/Application\ Support/obs-studio/logs OBS \
+            "${RUNNER_TEMP}/obs/OBS.app/Contents/MacOS/OBS" --disable-updater --disable-missing-files-check
+          grep -q 'Initializing Metal' "$(ls -t ~/Library/Application\ Support/obs-studio/logs/*.txt | head -n 1)"
 
   windows:
     name: Load in OBS on Windows 🪟
@@ -80,6 +90,8 @@ jobs:
       run:
         shell: pwsh
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           pattern: '*-windows-x64-*'
@@ -103,8 +115,9 @@ jobs:
           $PluginZip = Get-ChildItem -Path "${env:RUNNER_TEMP}/artifacts" -Recurse -Filter '*-windows-x64.zip' | Select-Object -First 1
           Expand-Archive -Path $PluginZip.FullName -DestinationPath "${env:ProgramData}/obs-studio/plugins"
 
-          New-Item -ItemType Directory -Force -Path "${env:APPDATA}/obs-studio" | Out-Null
+          New-Item -ItemType Directory -Force -Path "${env:APPDATA}/obs-studio/basic/scenes" | Out-Null
           Set-Content -Path "${env:APPDATA}/obs-studio/user.ini" -Value "[General]`nFirstRun=true"
+          Copy-Item -Path .github/scripts/load-test-scenes.json -Destination "${env:APPDATA}/obs-studio/basic/scenes/Untitled.json"
 
       - name: Start OBS 🚀
         run: |
@@ -131,4 +144,10 @@ jobs:
           }
           if (Select-String -Path $Log.FullName -Pattern '\[obs-bmagicam\] (this build is for|cannot receive SRT)' -Quiet) {
             throw 'the FFmpeg in OBS cannot run the stream receiver'
+          }
+          if (-not (Select-String -Path $Log.FullName -Pattern "filter: 'Beautify' \(bmagicam_beautify\)" -Quiet)) {
+            throw 'the test scene collection did not load the Beautify filter'
+          }
+          if (Select-String -Path $Log.FullName -Pattern '\[obs-bmagicam\] Beautify cannot load its effect' -Quiet) {
+            throw 'the Beautify effect does not compile with Direct3D 11'
           }

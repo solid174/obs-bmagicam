@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Starts OBS, waits until its startup is complete, stops it, and checks in its log that obs-bmagicam loaded.
+# Starts OBS, waits until its startup is complete, stops it, and checks in its log that obs-bmagicam loaded and
+# that the Beautify filter in the test scene collection (load-test-scenes.json) compiled its effect.
 #
 # Usage: load-test <log directory> <OBS process name> <command that starts OBS...>
 
@@ -42,5 +43,15 @@ fi
 
 if grep -E '\[obs-bmagicam\] (this build is for|cannot receive SRT)' "${log}"; then
   echo '::error::the FFmpeg in OBS cannot run the stream receiver'
+  exit 1
+fi
+
+if ! grep -q "filter: 'Beautify' (bmagicam_beautify)" "${log}"; then
+  echo '::error::the test scene collection did not load the Beautify filter'
+  exit 1
+fi
+
+if grep -q '\[obs-bmagicam\] Beautify cannot load its effect' "${log}"; then
+  echo '::error::the Beautify effect does not compile with this renderer'
   exit 1
 fi

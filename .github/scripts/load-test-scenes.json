@@ -1,0 +1,38 @@
+{
+    "name": "Untitled",
+    "current_scene": "Scene",
+    "current_program_scene": "Scene",
+    "scene_order": [{ "name": "Scene" }],
+    "sources": [
+        {
+            "id": "scene",
+            "versioned_id": "scene",
+            "name": "Scene",
+            "uuid": "6f4b8f9e-1d2c-4f0a-9b1e-000000000001",
+            "settings": {
+                "id_counter": 1,
+                "items": [{ "id": 1, "name": "Color", "source_uuid": "6f4b8f9e-1d2c-4f0a-9b1e-000000000002", "visible": true }]
+            }
+        },
+        {
+            "id": "color_source",
+            "versioned_id": "color_source_v3",
+            "name": "Color",
+            "uuid": "6f4b8f9e-1d2c-4f0a-9b1e-000000000002",
+            "settings": { "color": 4285036736, "width": 1920, "height": 1080 },
+            "filters": [
+                {
+                    "id": "bmagicam_beautify",
+                    "versioned_id": "bmagicam_beautify",
+                    "name": "Beautify",
+                    "uuid": "6f4b8f9e-1d2c-4f0a-9b1e-000000000003",
+                    "settings": { "strength": 50 }
+                }
+            ]
+        }
+    ],
+    "groups": [],
+    "transitions": [],
+    "current_transition": "Fade",
+    "transition_duration": 300
+}
