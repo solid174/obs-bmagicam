@@ -46,19 +46,19 @@ src/
   source/                iPhone Camera obs_source_info, properties, histogram
   sync/                  microphone sync: capture and the GCC-PHAT lag estimate
   filter/                Beautify: the filter and its passes, styles, the skin and noise model
+  remote/                Remote Control: access rules, settings, the server, the API and its events
   ui/                    Camera Controls dock and its panels, painted controls in widgets/, wizard, setup guide
 data/
   locale/                en-US.ini, ru-RU.ini
   looks/builtin.json     built-in looks
   beauty/styles.json     built-in Beauty styles
   effects/beautify.effect  Beautify's GPU passes
+  panel/                 the Remote Control web panel
   images/setup/          phone screenshots for the wizard
   THIRD-PARTY-NOTICES.txt
 ```
 
-Remote Control adds `remote/` and `data/panel/` in 1.1.
-
-Modules depend downward only: `ui` uses `source`, `filter`, `camera` and `sync`; `camera` uses `phone`, `stream` and `discovery`. Nothing below `ui` uses Qt widgets, and nothing below `camera` knows about OBS sources.
+Modules depend downward only: `ui` uses `source`, `filter`, `remote`, `camera` and `sync`; `remote` uses `source`, `filter` and `camera`; `camera` uses `phone`, `stream` and `discovery`. Nothing below `ui` uses Qt widgets, and nothing below `camera` knows about OBS sources.
 
 ## Camera session
 
@@ -117,7 +117,7 @@ So a scene collection always reproduces its stream format and its look, while li
 
 The Beauty controls bind to the source's Beautify filter instead. Filters are private sources, so their changes are not announced globally: the dock follows the filter's own `update` and `enable` signals, and the global ones for added and removed filters.
 
-In 1.1 the web panel and the API need the same controls, and a table of control descriptors (ID, phone endpoint and field, value type, range source, unit, lock rules, stream impact, Simple or Advanced, locale keys, factory default) replaces the dock's direct bindings, so one list keeps the three surfaces identical.
+The web panel and the API are drawn from the control map in `camera/control-map` ([Remote Control server](#remote-control-server-11)). The dock still has its own bindings, written before the map; moving the dock onto the map would keep the three surfaces identical by construction and is open.
 
 ## Video path
 
@@ -283,14 +283,14 @@ The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera o
 
 ## Remote Control server (1.1)
 
-- cpp-httplib server on its own thread pool. Off by default (WEB-1); default port 4466, next to obs-websocket's 4455.
-- **Access (WEB-4):**
-  - accepts connections only from loopback and private addresses (10/8, 172.16/12, 192.168/16, 100.64/10, link-local, and IPv6 ULA and link-local), and refuses everything else with 403;
-  - requires a password, which is generated on first use and changeable;
-  - slows down repeated wrong passwords.
-- Serves the web panel from `data/panel/`, the REST API under `/api/v1`, and live changes over a WebSocket at `/api/v1/events`. See [remote-api.md](remote-api.md).
-- Handlers read and write through `CameraControls`, the same path as the dock. Beautify changes go through `obs_source_update` on the filter.
-- The dialog in the Tools menu shows the address, password and a QR code made with qrcodegen, the generator OBS uses for its own WebSocket QR code.
+`remote/` serves the web panel and the API ([remote-api.md](remote-api.md)) with cpp-httplib, on its own thread pool. It is off by default (WEB-1); default port 4466, next to obs-websocket's 4455. OBS starts it once it has loaded the scene collection and stops it before it exits.
+
+- **Access (WEB-4).** A check before routing accepts only loopback and private addresses (10/8, 172.16/12, 192.168/16, 100.64/10, 169.254/16, IPv6 unique local and link-local) and answers everything else with 403. API requests carry the password as a bearer token; a wrong one answers 401 after a second, and ten in a minute block the address for a minute (429). The password is generated on first use and kept in `remote.json`.
+- **One description of the controls.** `camera/control-map` describes every control of the phone: its ID, tab, kind (number, stops, choice, switch, action, text), names and tooltip keys, Simple-mode name, unit, the properties it shows, and how it reads and writes them. Before a write, a value is checked against the phone's current state: within the range, snapped to a stop, one of the options, not locked (CTL-4). The API and the web panel are drawn from it; the dock still binds to the phone directly ([How the dock binds to the phone](#how-the-dock-binds-to-the-phone)).
+- **Requests** read and write through each camera's `CameraControls`, the same path as the dock, and change looks, stream presets and Beautify filters through libobs, as obs-websocket does from its own threads. Set up for streaming and the resets run in the background and report when they are done.
+- **Events.** The WebSocket at `/api/v1/events` signs in with its first message, then sends the whole state. A watch thread follows each camera's `CameraControls` listeners, gathers a burst of changes for 40 ms and sends each changed control's state; camera states and Beautify filters are compared twice a second. Each client has its own queue, which its connection's thread sends, so a dragged slider sends only the newest state of each control and no two threads write to one socket.
+- **Panel.** `data/panel/` is served as is: one HTML page, its style sheet and script. The script draws everything from the control descriptors, in the colors of the OBS theme, which the user interface passes to the server whenever the theme changes, and in OBS's language from `/api/v1/locale`.
+- **Tools dialog.** Turns the server on, sets the port and password, and shows the panel's address with a QR code made with qrcodegen, the generator OBS uses for its own WebSocket QR code. The addresses come from Qt Network.
 
 ## Persistence
 
@@ -318,7 +318,7 @@ The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera o
 | Library | Used for | Windows, macOS | Linux | License |
 | --- | --- | --- | --- | --- |
 | libobs, obs-frontend-api | Plugin API | OBS SDK from the buildspec | `obs-studio` dev files | GPL-2.0-or-later |
-| Qt 6 Widgets | Dock, wizard, dialogs | obs-deps | Distribution | LGPL-3.0 |
+| Qt 6 Widgets, Network | Dock, wizard, dialogs; the computer's addresses for Remote Control | obs-deps | Distribution | LGPL-3.0 |
 | FFmpeg (avformat, avcodec, avutil, swresample) | SRT input, demux, decode, audio drift compensation | obs-deps | Distribution | LGPL-2.1-or-later |
 | Mbed TLS | TLS to the phone | obs-deps | Distribution | Apache-2.0 or GPL-2.0-or-later |
 | nlohmann/json | JSON | obs-deps | Distribution | MIT |

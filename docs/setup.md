@@ -97,6 +97,16 @@ In the Camera Controls menu (⋮):
 - **Reset to camera defaults** returns every camera setting to how a fresh install of Blackmagic Camera has it.
 - **Restore my settings** returns the phone's settings to exactly how they were before obs-bmagicam first touched them. The same settings are also saved on the phone as the preset "Before obs-bmagicam". The phone's own livestream destination and video format come back whenever you remove the iPhone Camera or close OBS.
 
+## 9. Control from a phone or tablet
+
+Remote Control puts the Camera Controls and Beautify on a phone or tablet on the same network, and offers an API for Stream Deck, Bitfocus Companion and scripts ([remote-api.md](remote-api.md)).
+
+1. In OBS: **Tools → iPhone Camera Remote Control…**, check **Enable Remote Control**, then **OK**. On Windows, allow OBS when the firewall asks.
+2. **Show Connect Info** shows the panel's address and a QR code. Scan the code with the phone's camera: the panel opens, already signed in. Or open the address in any browser and type the password.
+3. The panel has Simple and Advanced modes, like the dock; tap ⓘ next to any control to see what it does.
+
+Only devices on your local network can connect, and only with the password. Turn Remote Control off when you do not use it.
+
 ## Troubleshooting
 
 | What you see | Why | What to do |
@@ -107,6 +117,7 @@ In the Camera Controls menu (⋮):
 | "The phone streams, but no picture arrives" | Blackmagic Camera shows a message on the phone, the firewall blocks the stream, or the Wi-Fi is set to Public | Answer the message on the phone; otherwise step 3 |
 | Found on macOS only after a long wait, or never | OBS was denied local network access | System Settings → Privacy & Security → Local Network → OBS → on, then restart OBS |
 | The picture stutters | Weak Wi-Fi or 2.4 GHz | Move closer to the router, use 5 GHz, or connect the computer to the iPhone's hotspot. A lower stream preset also helps |
+| The Remote Control panel does not open on the phone | The phone is on another network, or the firewall blocks OBS | Put both on the same Wi-Fi; on Windows allow OBS in Windows Defender Firewall; use an address from Show Connect Info |
 | Beautify smooths something that is not skin | It has a skin-like color and little texture | Lower Mask softness; Show mask shows what counts as skin |
 | The phone gets hot | Long stream with the screen at full brightness | Dock → Phone → Phone screen → Brightness down, and keep the phone out of direct sun |
 | "Audio Source Unavailable! … iPhone Microphone has been disconnected" on the phone, and the picture stops | Blackmagic Camera lost the phone's microphone; the cause is not known yet | Tap OK on the phone. OBS reconnects by itself |

@@ -55,7 +55,7 @@ The template's workflows stay as they are:
 Added for this project:
 
 - **Load test** (`load-test.yaml`) after every push build: on each platform it installs the package the way a user would (the `.deb`, the `.pkg` into the home folder, the `.zip` into ProgramData), starts the released OBS 32.2 with a fresh configuration whose scene collection has a Beautify filter, waits for "Startup complete" and checks OBS's log for the plugin's load message and for the filter, whose effect must compile. On macOS it starts OBS a second time on the Metal renderer, so the effect is compiled by Direct3D 11, OpenGL and Metal. GitHub's runners have no GPU, so OBS renders in software (Microsoft Basic Render Driver, Apple Software Renderer, Mesa llvmpipe), which is enough to load modules. A release is only drafted when the load test passes.
-- **Unit tests** with CTest on all three runners, for the parts that need no phone and no OBS: Streaming XML generation and matching, the write queue, timestamp mapping, looks and look files, and the microphone sync's lag estimate.
+- **Unit tests** with CTest on all three runners, for the parts that need no phone and no OBS: Streaming XML generation and matching, the write queue, timestamp mapping, looks and look files, the microphone sync's lag estimate, Beautify's styles and skin model, and Remote Control's address and password checks.
 - **Windows installer** built after the `.zip` from `cmake/windows/resources/installer.iss`.
 - **License notices** in `data/THIRD-PARTY-NOTICES.txt`, which every package installs with the plugin's data (LIC-3).
 - **Ubuntu SRT check**, as above.

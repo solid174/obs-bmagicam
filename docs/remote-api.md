@@ -1,13 +1,13 @@
 # Remote Control API
 
-The HTTP API that obs-bmagicam serves when Remote Control is on (WEB-1 to WEB-5). The web panel uses exactly this API, so anything the panel can do, a script, Stream Deck or Bitfocus Companion can do too (WEB-3). How the server is built is in [architecture.md](architecture.md#remote-control-server).
+The HTTP API that obs-bmagicam serves when Remote Control is on (WEB-1 to WEB-5). The web panel uses exactly this API, so anything the panel can do, a script, Stream Deck or Bitfocus Companion can do too (WEB-3). How the server is built is in [architecture.md](architecture.md#remote-control-server-11).
 
 ## Basics
 
 - Turn it on in Tools → iPhone Camera Remote Control. Default address: `http://<computer>:4466`.
 - `GET /` serves the web panel. The API lives under `/api/v1`.
 - JSON in UTF-8. Changes within v1 only add fields and endpoints; anything incompatible becomes `/api/v2`.
-- Only loopback and private network addresses may connect; others get 403 (WEB-4).
+- Only loopback and private network addresses may connect (10/8, 172.16/12, 192.168/16, 100.64/10, 169.254/16, and IPv6 unique local and link-local); others get 403 (WEB-4).
 
 ## Authentication
 
@@ -17,7 +17,7 @@ With authentication on (the default), every API request carries the password:
 Authorization: Bearer <password>
 ```
 
-A wrong or missing password returns 401 after a one-second delay. Ten failures within a minute block the address for a minute. The WebSocket authenticates with its first message ([Events](#events)).
+A wrong or missing password returns 401 after a one-second delay. Ten failures from an address within a minute block it for a minute, with 429. The web panel itself is served without a password and asks for one; the WebSocket authenticates with its first message ([Events](#events)).
 
 ## Errors
 
@@ -27,19 +27,23 @@ A wrong or missing password returns 401 after a one-second delay. Ten failures w
 
 | Status | `code` | When |
 | --- | --- | --- |
-| 400 | `invalid` | Malformed request or value out of range |
+| 400 | `invalid` | Malformed request, or a value that does not fit the control: out of range, not one of its options, of the wrong type |
 | 401 | `unauthorized` | Missing or wrong password |
 | 403 | `forbidden` | Address outside the local network |
-| 404 | `not_found` | Unknown camera, control, look or filter |
-| 409 | `locked` | Another setting locks the control; `message` says which |
-| 422 | `unsupported` | The phone does not support this control |
-| 503 | `offline` | The camera is not connected; the body includes its state |
+| 404 | `not_found` | Unknown camera, control, action, look, source or filter |
+| 409 | `locked` | Another setting locks the control; `message` says which and how to unlock it, in OBS's language |
+| 409 | `taken`, `exists` | A look with that name exists; the source has a Beautify filter already |
+| 422 | `unsupported` | The phone does not offer the control now |
+| 429 | `blocked` | Too many wrong passwords from this address; try again in a minute |
+| 503 | `offline` | The camera is not connected; the body includes the camera's state under `camera` |
+| 504 | `timeout` | With `?wait=1`: the phone did not confirm the value within 3 s |
 
 ## Identifiers
 
 - **Camera:** the OBS source UUID of the iPhone Camera source. It stays the same across OBS restarts.
-- **Control:** the IDs in the [control map](ui.md#control-map), for example `wb.temperature`, `color.saturation`, `focus.mode`.
-- **Look:** `natural`, `studio`, `warm`, `vivid`, `soft`, `cinematic`, or the generated ID of a user look.
+- **Control:** the IDs in the [control map](ui.md#control-map), for example `wb.temperature`, `color.saturation`, `focus.mode`. `GET /api/v1/controls` lists them all.
+- **Look:** `natural`, `studio`, `warm`, `vivid`, `soft`, `cinematic`, or the name of a user look.
+- **Beautify filter:** the UUID of the source it is on and the filter's name.
 
 ## Endpoints
 
@@ -47,22 +51,50 @@ A wrong or missing password returns 401 after a one-second delay. Ten failures w
 
 | Method and path | Returns |
 | --- | --- |
-| `GET /api/v1/info` | Plugin, OBS and API versions, OBS language |
-| `GET /api/v1/theme` | The current OBS theme's palette (window, base, text, button, highlight colors), so a client can match OBS |
-| `GET /api/v1/locale` | UI strings in OBS's language |
-| `GET /api/v1/controls` | Control descriptors: ID, tab, group, label, tooltip, kind, unit, whether it changes the stream, whether it shows in Simple mode |
-| `GET /api/v1/stream-presets` | Stream presets ([ui.md](ui.md#iphone-camera-properties)) |
+| `GET /api/v1/info` | `plugin` and `obs` versions, `api` version (1), OBS's `language` |
+| `GET /api/v1/theme` | The current OBS theme's colors (`window`, `windowText`, `base`, `text`, `button`, `buttonText`, `highlight`, `highlightedText`, `mid`, …) and `dark`, so a client can match OBS |
+| `GET /api/v1/locale` | Every UI string in OBS's language, by its key, with English for strings not translated |
+| `GET /api/v1/controls` | `tabs` (`id`, `label`) and `controls`: the descriptors, below |
+| `GET /api/v1/stream-presets` | Stream presets: `id`, `name`, `width`, `height`, `fps`, `bitrateKbps`, `description` ([ui.md](ui.md#iphone-camera-properties)) |
+
+A control descriptor:
+
+```json
+{"id": "exposure.iso", "kind": "stops", "tab": "camera", "label": "ISO",
+ "tooltip": "How sensitive the sensor is. Higher is brighter but grainier; …",
+ "unit": "", "decimals": 0, "stream": true,
+ "simple": true, "simpleLabel": "Brightness", "simpleEnds": ["darker", "brighter"], "companion": "exposure.auto"}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `kind` | `number` (a range in steps), `stops` (a list of values), `choice` (one of several options), `switch` (true or false), `action` (something the phone does once), `text` (read only) |
+| `tab` | Where Advanced mode shows it: `camera`, `color`, `focus`, `audio`, `phone` |
+| `label`, `tooltip` | In OBS's language (UI-5) |
+| `unit` | How values read: `K`, `mm`, `%`, `dB`, `1/` before a shutter speed, `f/` before an aperture, `s` for a duration, or a locale key prefix that names each value, such as `Dock.Focus.State.` |
+| `stream` | Whether OBS sees the change; the phone screen's tools, recording settings and the camera number do not change the stream (CTL-7) |
+| `simple`, `simpleLabel`, `simpleEnds` | Whether Simple mode shows it, under which name, and the words under the ruler's ends instead of numbers |
+| `companion` | Another control shown in the same row, such as Auto beside Brightness |
 
 ### Cameras
 
 | Method and path | Body | Does |
 | --- | --- | --- |
-| `GET /api/v1/cameras` | — | All iPhone Camera sources: ID, source name, phone (name, model, app version, address), state, stats |
-| `GET /api/v1/cameras/{camera}` | — | One camera with every control's value, availability, lock and range or options |
-| `PUT /api/v1/cameras/{camera}/controls/{control}` | `{"value": 4600}` | Changes a control. Answers 202 at once; the confirmed value arrives as an event. With `?wait=1` it answers 200 once the phone confirms, or 504 after 3 s |
-| `POST /api/v1/cameras/{camera}/actions/{action}` | depends | Runs an action, see below |
+| `GET /api/v1/cameras` | — | All iPhone Camera sources: `id`, `name`, `phone` (`name`, `version`), `state` (`noPhone`, `searching`, `connecting`, `starting`, `live`, `paused`, `error`), `text` (the state in words, with the stream preset while live), `connected`, `look`, `preset` |
+| `GET /api/v1/cameras/{camera}` | — | The same, with `controls`: every control's state by ID, below |
+| `PUT /api/v1/cameras/{camera}/controls/{control}` | `{"value": 4600}` | Changes a control. Answers 202 at once; the confirmed value arrives as an event. With `?wait=1` it answers 200 with the value once the phone confirms, or 504 after 3 s |
+| `POST /api/v1/cameras/{camera}/actions/{action}` | depends | Runs an action, below |
 | `PUT /api/v1/cameras/{camera}/look` | `{"look": "studio"}` | Applies a look |
-| `PUT /api/v1/cameras/{camera}/stream` | `{"preset": "1080p60-high"}` | Changes the stream preset |
+| `PUT /api/v1/cameras/{camera}/stream` | `{"preset": "1080p60-high"}` | Changes the stream preset; the camera sets the phone up again |
+
+A control's state:
+
+```json
+{"available": true, "value": 400, "locked": true, "lockReason": "Controlled by auto exposure. …",
+ "stops": [50, 64, 80, 100, …]}
+```
+
+`available` is false for controls the phone does not offer now (CTL-1). Numbers carry `min`, `max` and `step`; stops carry `stops` and, for the shutter, the flicker-free `marks`; choices carry `options` with each option's `id` and `label`. Values are written as they read: a number in the control's unit, an option's `id`, true or false; an action takes any value. A number outside the range is refused; stops snap to the nearest stop. `focus.position` is 0–100 %, near to far. Audio channels are numbered 1 and 2, as the dock names them.
 
 Actions:
 
@@ -73,18 +105,18 @@ Actions:
 | `focus-point` | `{"x": 0.5, "y": 0.4}` | Focus at a point of the picture, 0–1 from the top left |
 | `set-up-for-streaming` | — | CTL-8 |
 | `record-start`, `record-stop` | — | Recording on the phone |
-| `reset-group` | `{"group": "color"}` | Resets one group to defaults (RST-3) |
+| `reset-group` | `{"group": "color"}` | Resets one group to defaults (RST-3): `color`, `focus`, `audio` or `screen` |
 | `reset-defaults` | — | Reset to camera defaults (RST-1) |
-| `restore-settings` | — | Restore the phone's settings from before obs-bmagicam (RST-2) |
+| `restore-settings` | — | Restore the phone's settings from before obs-bmagicam (RST-2); 404 when none were saved for the phone |
 
-Resets answer 202 and report progress as events until every value is confirmed (RST-4).
+`set-up-for-streaming`, `reset-defaults` and `restore-settings` take a few seconds: they answer 202 at once and report with an `action` event when they are done, with `done` true once the phone confirmed every step (RST-4).
 
 ### Looks
 
 | Method and path | Body | Does |
 | --- | --- | --- |
-| `GET /api/v1/looks` | — | Built-in and user looks with their values |
-| `POST /api/v1/looks` | `{"name": "Evening", "camera": "<camera>"}` | Saves a camera's current color as a user look |
+| `GET /api/v1/looks` | — | Built-in and user looks: `id`, `name`, `builtin`, `values` |
+| `POST /api/v1/looks` | `{"name": "Evening", "camera": "<camera>"}` | Saves a camera's current color as a user look (201). Built-in looks' IDs are taken |
 | `PATCH /api/v1/looks/{look}` | `{"name": "Evening warm"}` | Renames a user look |
 | `DELETE /api/v1/looks/{look}` | — | Deletes a user look |
 
@@ -92,44 +124,52 @@ Resets answer 202 and report progress as events until every value is confirmed (
 
 | Method and path | Body | Does |
 | --- | --- | --- |
-| `GET /api/v1/beautify` | — | Every Beautify filter: source, filter name, enabled, style, strength, advanced values |
-| `PUT /api/v1/beautify/{source}/{filter}` | `{"enabled": true, "style": "soft", "strength": 60}` or advanced values such as `{"smoothing": 45}` | Changes a filter; fields left out keep their value |
-| `GET /api/v1/beautify/styles` | — | Built-in and user styles |
+| `GET /api/v1/beautify` | — | Every Beautify filter on any source: `source`, `sourceName`, `filter`, `enabled`, `style`, `strength`, the advanced values and `showMask` |
+| `POST /api/v1/beautify` | `{"source": "<source>"}` | Adds a Beautify filter with Natural at 50 to a video source that has none (201), as the dock's Add Beauty does |
+| `PUT /api/v1/beautify/{source}/{filter}` | `{"enabled": true, "style": "soft", "strength": 60}` or advanced values such as `{"smoothing": 45}` | Changes a filter; fields left out keep their value. Answers with the filter |
+| `GET /api/v1/beautify/styles` | — | Built-in and user styles: `id`, `name`, `builtin`, `values` |
 
-Advanced values: `smoothing`, `texture`, `evening`, `sharpen`, `glow`, `maskSoftness`, `detailSize` (0–100) and `showMask`. Setting one turns the style into `custom`, as in the dock.
+Advanced values: `smoothing`, `texture`, `evening`, `sharpen`, `glow`, `maskSoftness`, `detailSize` (0–100) and `showMask`. A style sets its values first; values given in the same request go on top. Values away from the style make it `custom`, as in the dock.
 
-`{source}` is the OBS source UUID and `{filter}` the filter name, URL-encoded.
+`{filter}` is the filter name, URL-encoded.
 
 ## Events
 
-`GET /api/v1/events` upgrades to a WebSocket. The first client message authenticates:
+`GET /api/v1/events` upgrades to a WebSocket. The first client message authenticates, within 10 s:
 
 ```json
 {"op": "hello", "password": "…"}
 ```
 
-The server answers with everything a client needs to draw its UI:
+A wrong password answers with an `error` and closes. Otherwise the server answers with everything a client needs to draw its UI:
 
 ```json
-{"op": "ready", "cameras": [ … ], "looks": [ … ], "beautify": [ … ]}
+{"op": "ready", "info": { … }, "cameras": [ … ], "looks": [ … ], "beautify": [ … ], "styles": [ … ]}
 ```
 
-Then it pushes changes as they happen:
+`cameras` are complete, with every control's state. Then it pushes changes as they happen:
 
 ```json
-{"op": "control", "camera": "8f1c…", "control": "wb.temperature", "value": 4600, "locked": false}
-{"op": "camera",  "camera": "8f1c…", "state": "live", "text": "Live · 1080p60 · 12 Mb/s"}
-{"op": "stats",   "camera": "8f1c…", "fps": 60, "bitrateKbps": 12100, "phoneBufferPercent": 3, "battery": 50}
-{"op": "reset",   "camera": "8f1c…", "done": 14, "total": 31}
-{"op": "beautify", "source": "2b7e…", "filter": "Beautify", "enabled": true, "settings": { … }}
+{"op": "control", "camera": "8f1c…", "control": "wb.temperature", "available": true, "value": 4600, "locked": false, "min": 2500, "max": 10000, "step": 50}
+{"op": "camera", "camera": {"id": "8f1c…", "state": "live", "text": "Live · 1080p60 High", "connected": true, … }}
+{"op": "cameraRemoved", "camera": "8f1c…"}
+{"op": "beautify", "beautify": [ … every Beautify filter … ]}
 {"op": "looks", "looks": [ … ]}
+{"op": "action", "camera": "8f1c…", "action": "reset-defaults", "done": true}
+{"op": "error", "request": "set", "status": 409, "code": "locked", "message": "…"}
 ```
 
-Clients can also send changes over the socket. The panel does this while a slider is dragged; it behaves like the matching PUT or POST:
+A `control` event carries the control's whole state, so ranges and options that change with the lens or the format arrive with it; while a control changes quickly, only its newest state is sent. A `camera` event carries the controls too when the camera has just connected. Camera states and Beautify filters are compared twice a second.
+
+Clients can also send changes over the socket; each behaves like the matching request, and a failure comes back as an `error` event. The panel does this while a slider is dragged:
 
 ```json
 {"op": "set", "camera": "8f1c…", "control": "color.saturation", "value": 1.2}
-{"op": "action", "camera": "8f1c…", "action": "refocus"}
+{"op": "action", "camera": "8f1c…", "action": "focus-point", "x": 0.5, "y": 0.4}
+{"op": "look", "camera": "8f1c…", "look": "vivid"}
+{"op": "stream", "camera": "8f1c…", "preset": "1080p30"}
+{"op": "beautify", "source": "2b7e…", "filter": "Beautify", "settings": {"strength": 60}}
+{"op": "addBeauty", "source": "2b7e…"}
 ```
 
 ## Examples
@@ -142,6 +182,7 @@ curl -H "$H" $B/cameras
 curl -H "$H" -X PUT $B/cameras/8f1c…/look -d '{"look":"vivid"}'
 curl -H "$H" -X PUT "$B/cameras/8f1c…/controls/wb.temperature?wait=1" -d '{"value":5200}'
 curl -H "$H" -X POST $B/cameras/8f1c…/actions/refocus
+curl -H "$H" -X PUT "$B/beautify/2b7e…/Beautify" -d '{"style":"soft","strength":60}'
 ```
 
 For Bitfocus Companion or Stream Deck, use their generic HTTP actions with the same URLs, the `Authorization` header and a JSON body.

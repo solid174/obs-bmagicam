@@ -233,7 +233,7 @@ Every setting the app offers over its API, with the ID used by the dock, the web
 
 | Group | Control | ID | Widget | Phone endpoint | Test phone | Stream |
 | --- | --- | --- | --- | --- | --- | --- |
-| Exposure | Auto exposure | `exposure.mode` | Choice: Off, Continuous, One shot | `/video/autoExposure` | Continuous | yes |
+| Exposure | Auto exposure | `exposure.auto` | Switch: Continuous or Off (the Auto chips beside Brightness, ISO and Shutter) | `/video/autoExposure` | Continuous | yes |
 | Exposure | ISO | `exposure.iso` | Discrete | `/video/iso`, `/video/supportedISOs` | 20–1920 | yes, locked under auto exposure |
 | Exposure | Shutter | `exposure.shutter` | Discrete, flicker-free marked | `/video/shutter`, `/video/supportedShutters`, `/video/flickerFreeShutters` | 1/60–1/8000 | yes, locked under auto exposure |
 | Exposure | Shutter display | `exposure.shutterDisplay` | Not in the dock: it shows speeds always, and writes speeds whatever the phone displays (V-9) | `/video/shutter/measurement` | speed | — |
@@ -241,7 +241,7 @@ Every setting the app offers over its API, with the ID used by the dock, the web
 | White balance | Temperature | `wb.temperature` | Continuous, K | `/video/whiteBalance` | 2500–10000 | yes |
 | White balance | Tint | `wb.tint` | Continuous | `/video/whiteBalanceTint` | −50…50 | yes |
 | White balance | Auto white balance | `wb.auto` | Action | `/video/whiteBalance/doAuto` | — | yes |
-| — | Set up for streaming | `camera.setUpForStreaming` | Action | several ([architecture.md](architecture.md#set-up-for-streaming-ctl-8)) | — | yes |
+| — | Set up for streaming | API action `set-up-for-streaming` | Action | several ([architecture.md](architecture.md#set-up-for-streaming-ctl-8)) | — | yes |
 
 ### Color
 
@@ -264,11 +264,12 @@ Every setting the app offers over its API, with the ID used by the dock, the web
 | Lens | Camera | `lens.camera` | Choice, e.g. "Back 1× · 24 mm" | `/lens/cameras`, `/lens/cameras/active` | 7 lenses | yes |
 | Lens | Automatic lens switching | `lens.auto` | Switch, shown where `supported` | `/lens/cameras/auto` | hidden: not supported | yes |
 | Lens | Zoom | `lens.zoom` | Continuous, shows mm | `/lens/zoom` | 19–570 mm | yes |
-| Lens | Stabilization | `lens.stabilization` | Choice: Off, On (STB-2) | `/lens/opticalImageStabilization` `enabled`: false is Off, true is Standard when written and any other mode when read | on | yes |
-| Focus | Autofocus | `focus.mode` | Choice: Off, One shot, Continuous, Track face, Track object (as supported) | `/lens/focus/autoFocus` | One shot, Continuous | yes |
-| Focus | Focus | `focus.position` | Continuous, near to far | `/lens/focus` | 0–1 | yes, locked under continuous autofocus |
+| Lens | Stabilization | `lens.stabilization` | Switch, shown as Off and On (STB-2) | `/lens/opticalImageStabilization` `enabled`: false is Off, true is Standard when written and any other mode when read | on | yes |
+| Focus | Autofocus | `focus.mode` | Choice: Manual (`manual`), then One shot, Continuous, Track face, Track object (as supported) | `/lens/focus/autoFocus` | One shot, Continuous | yes |
+| Focus | Auto (Simple) | `focus.auto` | Switch: Continuous or One shot | `/lens/focus/autoFocus` | Continuous | yes |
+| Focus | Focus | `focus.position` | Continuous, near to far; 0–100 % in the API | `/lens/focus` | 0–1 | yes, locked under continuous autofocus |
 | Focus | Refocus | `focus.refocus` | Action | `/lens/focus/autoFocus/retrigger` | — | yes |
-| Focus | Focus point | `focus.point` | Action: "Center"; clicking in Interact sets any point | `/lens/focus/autoFocus/target`, `/lens/focus/doAutoFocus` | 0.5, 0.5 | yes |
+| Focus | Focus point | `focus.center` | Action: "Center"; clicking in Interact, or the API action `focus-point`, sets any point | `/lens/focus/autoFocus/target`, `/lens/focus/doAutoFocus` | 0.5, 0.5 | yes |
 | Focus | Focus state | `focus.state` | Read-only: Focusing, Focused, Too close, Lost tracking | `/lens/focus/autoFocus` | Idle | — |
 
 ### Beauty (1.1)
@@ -299,7 +300,7 @@ These drive the Beautify filter on the selected source, so they work in OBS, not
 | Format | Dynamic range | `format.dynamicRange` | Choice | `/system/dynamicRange` | Video, Extended Video, Film, HLG | yes |
 | Format | Recording codec | `format.codec` | Choice | `/system/format`, `/system/supportedCodecFormats` | ProRes, HEVC, H.264 | recordings only (V-3) |
 | Format | Off-speed recording | `format.offSpeed` | Not in the dock in 1.0; set on the phone | `/system/format` | 4–60 fps | recordings only |
-| Recording | Record on phone | `record.active` | Action: start, stop | `/transports/0/record`, `/transports/0/stop` | — | — |
+| Recording | Record on phone | `record.active` | Action: start, stop; a switch in the API | `/transports/0/record`, `/transports/0/stop` | — | — |
 | Recording | Proxy recording | `record.proxy` | Switch | `/transports/0/proxyRecording` | on | recordings only |
 | Recording | Storage left | `record.storage` | Read-only | `/media/workingset` | 4 h 43 min left | — |
 | Recording | Slate: scene, take, good take, auto-increment | `slate.*` | Not in the dock in 1.0; set on the phone | `/slates/nextClip`, `/slates/takeAutoIncrement` | — | recordings only |
@@ -381,22 +382,25 @@ Finish adds the source to the current scene fitted to the canvas and shows the C
 
 ## Remote Control dialog (1.1)
 
-Laid out like Tools → WebSocket Server Settings (WEB-5):
+Tools → iPhone Camera Remote Control, laid out like Tools → WebSocket Server Settings (WEB-5):
 
 - Enable Remote Control (off by default)
 - Server port (4466)
-- Enable authentication, password (generated; Show, Copy, Generate)
-- Show Connect Info: the panel address (the computer's local address), the password, and a QR code that opens the panel already signed in
+- Enable authentication, password (generated on first use; Show, Copy, Generate)
+- Show Connect Info: the panel's address on each of the computer's local networks, the password, and a QR code that opens the panel already signed in. The password travels in the address's fragment (`#password=…`), which the browser never sends to the server; the panel keeps it in the browser's storage.
 - A note: "Only devices on your local network can connect."
+- Whether it runs, and at which address, or why it could not start, such as a port in use.
 
 ## Web panel (1.1)
 
-- One page served by OBS. It works on a phone held upright and on a tablet, with touch-sized sliders.
-- Simple and Advanced like the dock (UI-4). Simple is the default and shows the same eight rows; Advanced adds the tiles and the tabs. It uses the same kinds of controls as the dock (rulers, tiles, button rows, segmented controls), sized for touch (UI-6). Everything is rendered from `GET /api/v1/controls`, so the panel always matches the dock. Updates arrive over the WebSocket (WEB-2).
-- Every control has an ⓘ button that opens its help text (UI-5).
-- Colors follow the current OBS theme: the server passes the Qt palette at `/api/v1/theme`, and the panel maps it to CSS variables. Text uses the device's system font.
-- Language follows OBS's language and uses the same translations as the dock.
-- Sign-in: a password prompt, or the QR code from the dialog.
+- One page served by OBS. It works on a phone held upright and on a tablet, with touch-sized controls.
+- Simple and Advanced like the dock (UI-4). Simple is the default and shows the same eight rows: Set up for streaming, look, Brightness and Warmth with Auto, lens, focus with Refocus, stabilization, and Beauty. Advanced shows the camera's tiles (lens, frame rate, shutter, iris, ISO, white balance, tint) with the selected tile's adjuster below, then the Camera, Color, Focus, Beauty, Audio and Phone tabs; Phone also has Reset to camera defaults and Restore my settings, each confirmed first.
+- The same kinds of controls as the dock: rulers with a fixed center needle, dragged by touch, numbers in Advanced and words under the ends in Simple, a tap on the value to type it; button rows, chips and tiles (UI-6). Everything is drawn from `GET /api/v1/controls`, so the panel matches the dock. Updates arrive over the WebSocket (WEB-2); while the user drags a control, the phone's echoes do not move it.
+- Every row has an ⓘ button that opens its help text (UI-5); a locked control says what locks it.
+- Beauty: the camera's Beautify filter in Simple mode, or Add Beauty; in Advanced mode every value and Show mask, and every other Beautify filter in OBS, named by its source, since Beautify works on any source (BEA-1).
+- Colors follow the current OBS theme: the panel maps `/api/v1/theme` to CSS variables. Text uses the device's system font.
+- Language follows OBS's language and uses the same translations as the dock (`/api/v1/locale`).
+- Sign-in: the QR code from the dialog, or a password prompt. A lost connection shows "Reconnecting…" and comes back by itself.
 
 ## Text and languages
 

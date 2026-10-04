@@ -5,6 +5,7 @@ User-visible changes in each release. Versions follow [semantic versioning](http
 ## 1.1.0 (unreleased)
 
 - **Beautify:** a skin smoothing filter for any video source, on the GPU. Styles Natural, Soft and Glam and your own, one Beauty slider, and advanced values for smoothing, texture, tone evening, sharpening, glow, mask softness and detail size. The skin mask adapts to every skin tone and white balance and keeps eyes, brows, lips, hair and the background sharp; Show mask shows it. At 0 or turned off it leaves the picture untouched. In the dock as a Beauty row (Simple) and tab (Advanced), and as a choice in Add iPhone Camera.
+- **Remote Control:** a web panel for a phone or tablet on the same network, with Simple and Advanced modes like the dock, live updates, Beautify for every source, and help on every control; and an API with live events for Stream Deck, Bitfocus Companion and scripts. Off by default; Tools → iPhone Camera Remote Control turns it on and shows a QR code that opens the panel signed in. Only the local network may connect, with a password.
 
 ## 1.0.1 (2026-10-04)
 
