@@ -15,6 +15,7 @@ target_sources(
   obs-bmagicam-tests
   PRIVATE
     test-main.cpp
+    access-test.cpp
     beauty-styles-test.cpp
     lag-estimate-test.cpp
     looks-test.cpp
@@ -29,6 +30,7 @@ target_sources(
     ../src/filter/skin-model.cpp
     ../src/stream/media-clock.cpp
     ../src/phone/write-queue.cpp
+    ../src/remote/access.cpp
     ../src/sync/lag-estimate.cpp
 )
 target_include_directories(obs-bmagicam-tests PRIVATE ../src)

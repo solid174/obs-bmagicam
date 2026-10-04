@@ -14,10 +14,17 @@ add_library(${CMAKE_PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
 find_package(obs-frontend-api REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network)
 find_package(FFmpeg REQUIRED COMPONENTS avcodec avformat avutil swresample)
 find_package(MbedTLS REQUIRED)
 find_package(nlohmann_json REQUIRED)
+# qrcodegen draws the Remote Control QR code; obs-deps has a CMake package, Linux distributions a pkg-config file
+find_package(qrcodegencpp CONFIG QUIET)
+if(NOT TARGET qrcodegencpp::qrcodegencpp)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(qrcodegencpp REQUIRED IMPORTED_TARGET qrcodegencpp)
+  add_library(qrcodegencpp::qrcodegencpp ALIAS PkgConfig::qrcodegencpp)
+endif()
 
 # cpp-httplib talks to the phone; only its header is used, so its own CMake, which looks for OpenSSL, stays out
 include(FetchContent)
@@ -50,6 +57,8 @@ target_link_libraries(
     OBS::obs-frontend-api
     Qt6::Core
     Qt6::Widgets
+    Qt6::Network
+    qrcodegencpp::qrcodegencpp
     FFmpeg::avcodec
     FFmpeg::avformat
     FFmpeg::avutil
@@ -75,6 +84,8 @@ target_sources(
     src/camera/camera-routines.cpp
     src/camera/camera-routines.hpp
     src/camera/camera-session.cpp
+    src/camera/control-map.cpp
+    src/camera/control-map.hpp
     src/camera/camera-session.hpp
     src/camera/look-library.cpp
     src/camera/look-library.hpp
@@ -106,6 +117,16 @@ target_sources(
     src/phone/event-socket.hpp
     src/phone/write-queue.cpp
     src/phone/write-queue.hpp
+    src/remote/access.cpp
+    src/remote/access.hpp
+    src/remote/remote-api.cpp
+    src/remote/remote-api.hpp
+    src/remote/remote-events.cpp
+    src/remote/remote-events.hpp
+    src/remote/remote-server.cpp
+    src/remote/remote-server.hpp
+    src/remote/remote-settings.cpp
+    src/remote/remote-settings.hpp
     src/source/camera-source.cpp
     src/source/camera-source.hpp
     src/source/histogram.cpp
@@ -137,6 +158,8 @@ target_sources(
     src/ui/frontend.hpp
     src/ui/microphone-row.cpp
     src/ui/microphone-row.hpp
+    src/ui/remote-dialog.cpp
+    src/ui/remote-dialog.hpp
     src/ui/panels.hpp
     src/ui/setup-guide.cpp
     src/ui/setup-guide.hpp

@@ -156,21 +156,6 @@ QLabel *muted_label(const QString &content, QWidget *parent)
 	return label;
 }
 
-// The shutter as a speed (1/x), also when the phone reports it as an angle
-double shutter_speed(const nlohmann::json &shutter, double fps)
-{
-	const double speed = number_at(shutter, "shutterSpeed");
-	const double angle = number_at(shutter, "shutterAngle");
-	if (speed <= 0 && angle > 0 && fps > 0)
-		return fps * 360 / angle;
-	return speed;
-}
-
-double frame_rate(const nlohmann::json &format)
-{
-	return std::strtod(string_at(format, "frameRate").c_str(), nullptr);
-}
-
 QString duration_text(double seconds)
 {
 	const int minutes = static_cast<int>(seconds / 60);

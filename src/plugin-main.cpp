@@ -7,6 +7,7 @@
 #include "camera/background-work.hpp"
 #include "discovery/phone-browser.hpp"
 #include "filter/beautify-filter.hpp"
+#include "remote/remote-server.hpp"
 #include "source/camera-source.hpp"
 #include "stream/ffmpeg-check.hpp"
 #include "ui/frontend.hpp"
@@ -40,6 +41,7 @@ bool obs_module_load(void)
 
 void obs_module_unload(void)
 {
+	bmagicam::remote::Server::instance().stop();
 	// Removed sources put their phones back in the background; the code they run must stay loaded until then
 	bmagicam::wait_for_background_work(std::chrono::seconds(15));
 	bmagicam::PhoneBrowser::shutdown();

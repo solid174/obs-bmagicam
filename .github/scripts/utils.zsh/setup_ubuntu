@@ -46,6 +46,7 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)deps]}) )) {
     libavutil-dev \
     libgles2-mesa-dev \
     libmbedtls-dev \
+    libqrcodegencpp-dev \
     libsimde-dev \
     libswresample-dev \
     nlohmann-json3-dev \

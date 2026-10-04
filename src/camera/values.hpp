@@ -19,5 +19,9 @@ std::vector<std::string> strings_at(const nlohmann::json &object, const char *ke
 // The "normalised" field, which some answers also carry as "normalized"; writes must use "normalised"
 // (docs/camera-api.md, Quirks)
 double normalized_at(const nlohmann::json &object, double fallback = 0);
+// The shutter as a speed (1/x), also when the phone reports it as an angle
+double shutter_speed(const nlohmann::json &shutter, double fps);
+// The frame rate of a /system/videoFormat value
+double frame_rate(const nlohmann::json &format);
 
 } // namespace bmagicam

@@ -3,6 +3,8 @@
 
 #include "values.hpp"
 
+#include <cstdlib>
+
 namespace bmagicam {
 
 double number_at(const nlohmann::json &object, const char *key, double fallback)
@@ -53,6 +55,20 @@ std::vector<std::string> strings_at(const nlohmann::json &object, const char *ke
 double normalized_at(const nlohmann::json &object, double fallback)
 {
 	return number_at(object, "normalized", number_at(object, "normalised", fallback));
+}
+
+double shutter_speed(const nlohmann::json &shutter, double fps)
+{
+	const double speed = number_at(shutter, "shutterSpeed");
+	const double angle = number_at(shutter, "shutterAngle");
+	if (speed <= 0 && angle > 0 && fps > 0)
+		return fps * 360 / angle;
+	return speed;
+}
+
+double frame_rate(const nlohmann::json &format)
+{
+	return std::strtod(string_at(format, "frameRate").c_str(), nullptr);
 }
 
 } // namespace bmagicam
