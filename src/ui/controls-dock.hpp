@@ -72,6 +72,7 @@ private:
 
 	OBSWeakSource source_;
 	OBSWeakSource watched_scene_;
+	bool frontend_callback_ = true;
 	QTimer state_timer_;
 	QTimer message_timer_;
 	QString message_;

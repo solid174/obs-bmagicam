@@ -71,7 +71,7 @@ macOS signing and notarization use the template's repository secrets:
 | `MACOS_SIGNING_PROVISIONING_PROFILE` | Provisioning profile, if used |
 | `MACOS_NOTARIZATION_USERNAME`, `MACOS_NOTARIZATION_PASSWORD` | Apple ID and app-specific password for notarization |
 
-An Apple Developer Program membership is needed for these. Without it, CI still builds an unsigned `.pkg` that macOS only opens after a right-click → Open.
+An Apple Developer Program membership is needed for these. Without it, CI still builds an unsigned `.pkg`, which macOS opens only after System Settings → Privacy & Security → Open Anyway; the setup guide says so. Version 1.0 ships unsigned.
 
 ## Versions
 

@@ -21,6 +21,8 @@ Download the file for your system from the [releases page](https://github.com/so
 
 Start OBS. The Tools menu now has **Add iPhone Camera…**.
 
+The macOS package is not signed by an Apple developer yet. If macOS refuses to open it, open System Settings → Privacy & Security, scroll to the message about obs-bmagicam and click **Open Anyway**.
+
 ## 2. Prepare the iPhone (once)
 
 1. Install **Blackmagic Camera** from the App Store and open it.

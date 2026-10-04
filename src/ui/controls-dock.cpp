@@ -202,7 +202,8 @@ ControlsDock::~ControlsDock()
 	signal_handler_t *handler = obs_get_signal_handler();
 	for (const char *signal : {"source_create", "source_destroy", "source_rename"})
 		signal_handler_disconnect(handler, signal, source_list_changed, this);
-	obs_frontend_remove_event_callback(frontend_event, this);
+	if (frontend_callback_)
+		obs_frontend_remove_event_callback(frontend_event, this);
 	if (OBSSourceAutoRelease scene = obs_weak_source_get_source(watched_scene_))
 		signal_handler_disconnect(obs_source_get_signal_handler(scene), "item_select", item_selected, this);
 	if (dock_instance == this)
@@ -233,6 +234,11 @@ void ControlsDock::frontend_event(enum obs_frontend_event event, void *data)
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CLEANUP:
 		dock->choose_source({});
+		break;
+	case OBS_FRONTEND_EVENT_EXIT:
+		// OBS drops its callbacks before it destroys the docks
+		obs_frontend_remove_event_callback(frontend_event, dock);
+		dock->frontend_callback_ = false;
 		break;
 	case OBS_FRONTEND_EVENT_THEME_CHANGED:
 		// The dock's own controls paint from the palette; the new one shows on the next paint

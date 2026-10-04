@@ -67,6 +67,7 @@ MicrophoneRow::MicrophoneRow(PanelContext context, QWidget *parent)
 	sync_->setObjectName("syncMicrophone");
 	sync_->setToolTip(text("Dock.Microphone.Sync.Tooltip"));
 	undo_ = new QPushButton(text("Dock.Microphone.Undo"), controls);
+	undo_->setObjectName("undoMicrophoneSync");
 	undo_->setToolTip(text("Dock.Microphone.Undo.Tooltip"));
 	undo_->hide();
 	layout->addWidget(microphones_);

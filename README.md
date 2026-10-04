@@ -29,7 +29,7 @@ Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name 
 | --- | --- |
 | [Setup](docs/setup.md) | Installing the plugin, preparing the phone, first connection, troubleshooting |
 | [Requirements](docs/requirements.md) | What 1.0 and 1.1 must do |
-| [User interface](docs/ui.md) | The dock, every control, properties, wizard, web panel |
+| [User interface](docs/ui.md) | The dock, every control, properties, wizard; the web panel planned for 1.1 |
 | [Architecture](docs/architecture.md) | How it is built, decisions, open questions, milestones |
 | [Blackmagic Camera API](docs/camera-api.md) | The phone's API as verified on a real iPhone, with stream and latency measurements |
 | [Remote Control API](docs/remote-api.md) | The plugin's own HTTP and WebSocket API, planned for 1.1 |

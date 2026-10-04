@@ -265,9 +265,13 @@ void Ruler::paintEvent(QPaintEvent *)
 		painter.setPen(QPen(tick_color, major ? 1.5 : 1.0));
 		painter.drawLine(QPointF(x, top), QPointF(x, top + (major ? major_length : minor_length)));
 		if (major && !plain_) {
-			const QRectF label(x - major_every * step_px / 2, top + major_length + fh * 0.1,
-					   major_every * step_px, fh);
-			painter.drawText(label, Qt::AlignHCenter | Qt::AlignTop, text_for(value_at(index)));
+			// Only labels that fit whole: a cut one reads as another number
+			const QString label = text_for(value_at(index));
+			const double half = fontMetrics().horizontalAdvance(label) / 2.0;
+			if (x - half >= 0 && x + half <= width())
+				painter.drawText(QRectF(x - major_every * step_px / 2, top + major_length + fh * 0.1,
+							major_every * step_px, fh),
+						 Qt::AlignHCenter | Qt::AlignTop, label);
 		}
 		if (std::find(marks_.begin(), marks_.end(), index) != marks_.end()) {
 			painter.setPen(Qt::NoPen);
