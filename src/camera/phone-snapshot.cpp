@@ -139,14 +139,12 @@ void take_snapshot_if_new(const CameraClient &client, const std::string &phone_k
 		if (reply.ok() && reply.body.is_object())
 			values[setting.path] = reply.body;
 	}
-	const ApiReply destination = client.get("/livestreams/0/activePlatform");
-
-	// A phone preset as well, which the user can load in the app; where the phone has presets at all
+	// A phone preset as well, which the user can load in the app; where the phone has presets at all. The livestream
+	// destination is kept with the session's own record, which also gives it back after a crash.
 	const bool preset = client.put("/presets/" + url_segment(kPresetName)).ok();
 
 	const nlohmann::json snapshot = {
 		{"preset", preset ? kPresetName : ""},
-		{"destination", destination.ok() ? destination.body : nlohmann::json()},
 		{"values", values},
 	};
 	char *folder = obs_module_config_path("snapshots");

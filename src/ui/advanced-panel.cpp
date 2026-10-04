@@ -26,14 +26,42 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QSpinBox>
-#include <QStackedWidget>
-#include <QTabWidget>
+#include <QTabBar>
 #include <QVBoxLayout>
 
 #include <algorithm>
 #include <cmath>
 
 namespace bmagicam::ui {
+
+// Pages of which one shows at a time. Unlike a stacked widget, which takes the height of its tallest page, it takes
+// the height of the page shown, so short adjusters and tabs leave no gaps.
+class Pages : public QWidget {
+public:
+	explicit Pages(QWidget *parent) : QWidget(parent)
+	{
+		layout_ = new QVBoxLayout(this);
+		layout_->setContentsMargins(0, 0, 0, 0);
+	}
+
+	void add(QWidget *page)
+	{
+		page->setParent(this);
+		page->setVisible(pages_.empty());
+		layout_->addWidget(page);
+		pages_.push_back(page);
+	}
+
+	void show_page(int index)
+	{
+		for (size_t page = 0; page < pages_.size(); page++)
+			pages_[page]->setVisible(static_cast<int>(page) == index);
+	}
+
+private:
+	QVBoxLayout *layout_;
+	std::vector<QWidget *> pages_;
+};
 
 namespace {
 
@@ -110,25 +138,6 @@ private:
 	std::vector<Tile *> tiles_;
 };
 
-// Stacks and tabs take the height of the page shown, not of the tallest one
-void fit_to_current(QStackedWidget *stack)
-{
-	for (int index = 0; index < stack->count(); index++)
-		stack->widget(index)->setSizePolicy(QSizePolicy::Preferred, index == stack->currentIndex()
-										    ? QSizePolicy::Preferred
-										    : QSizePolicy::Ignored);
-	stack->updateGeometry();
-}
-
-void fit_to_current(QTabWidget *tabs)
-{
-	for (int index = 0; index < tabs->count(); index++)
-		tabs->widget(index)->setSizePolicy(QSizePolicy::Preferred, index == tabs->currentIndex()
-										   ? QSizePolicy::Preferred
-										   : QSizePolicy::Ignored);
-	tabs->updateGeometry();
-}
-
 QVBoxLayout *page_layout(QWidget *page)
 {
 	auto layout = new QVBoxLayout(page);
@@ -182,15 +191,21 @@ AdvancedPanel::AdvancedPanel(PanelContext context, QWidget *parent)
 	add_top(layout);
 	add_tiles(layout);
 
-	tabs_ = new QTabWidget(this);
-	tabs_->setObjectName("advancedTabs");
-	tabs_->addTab(color_tab(), text("Dock.Tab.Color"));
-	tabs_->addTab(focus_tab(), text("Dock.Tab.Focus"));
-	tabs_->addTab(audio_tab(), text("Dock.Tab.Audio"));
-	tabs_->addTab(phone_tab(), text("Dock.Tab.Phone"));
-	connect(tabs_, &QTabWidget::currentChanged, this, [this] { fit_to_current(tabs_); });
-	fit_to_current(tabs_);
-	layout->addWidget(tabs_);
+	auto tab_bar = new QTabBar(this);
+	tab_bar->setObjectName("advancedTabs");
+	tab_bar->setExpanding(false);
+	auto tabs = new Pages(this);
+	const std::pair<const char *, QWidget *> groups[] = {{"Dock.Tab.Color", color_tab()},
+							     {"Dock.Tab.Focus", focus_tab()},
+							     {"Dock.Tab.Audio", audio_tab()},
+							     {"Dock.Tab.Phone", phone_tab()}};
+	for (const auto &[label, page] : groups) {
+		tab_bar->addTab(text(label));
+		tabs->add(page);
+	}
+	connect(tab_bar, &QTabBar::currentChanged, tabs, [tabs](int index) { tabs->show_page(index); });
+	layout->addWidget(tab_bar);
+	layout->addWidget(tabs);
 	layout->addStretch();
 
 	refresh({});
@@ -364,14 +379,10 @@ void AdvancedPanel::add_tiles(QVBoxLayout *layout)
 	}
 	layout->addWidget(strip);
 
-	adjusters_ = new QStackedWidget(this);
-	adjusters_->addWidget(lens_adjuster());
-	adjusters_->addWidget(preset_adjuster());
-	adjusters_->addWidget(shutter_adjuster());
-	adjusters_->addWidget(iris_adjuster());
-	adjusters_->addWidget(iso_adjuster());
-	adjusters_->addWidget(white_balance_adjuster());
-	adjusters_->addWidget(tint_adjuster());
+	adjusters_ = new Pages(this);
+	for (QWidget *adjuster : {lens_adjuster(), preset_adjuster(), shutter_adjuster(), iris_adjuster(),
+				  iso_adjuster(), white_balance_adjuster(), tint_adjuster()})
+		adjusters_->add(adjuster);
 	layout->addWidget(adjusters_);
 
 	connect(group, &QButtonGroup::idClicked, this, [this](int index) { select_tile(index); });
@@ -384,8 +395,7 @@ void AdvancedPanel::add_tiles(QVBoxLayout *layout)
 void AdvancedPanel::select_tile(int index)
 {
 	tiles_[static_cast<size_t>(index)]->setChecked(true);
-	adjusters_->setCurrentIndex(index);
-	fit_to_current(adjusters_);
+	adjusters_->show_page(index);
 }
 
 void AdvancedPanel::refresh_tiles()

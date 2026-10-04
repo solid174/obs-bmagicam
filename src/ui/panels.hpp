@@ -17,14 +17,13 @@
 class QComboBox;
 class QLabel;
 class QPushButton;
-class QStackedWidget;
-class QTabWidget;
 class QVBoxLayout;
 
 namespace bmagicam::ui {
 
 class Chip;
 class HistogramView;
+class Pages;
 class MicrophoneSync;
 class Ruler;
 class Segmented;
@@ -148,8 +147,7 @@ private:
 	QLabel *stream_ = nullptr;
 	QLabel *battery_ = nullptr;
 	std::vector<Tile *> tiles_;
-	QStackedWidget *adjusters_ = nullptr;
-	QTabWidget *tabs_ = nullptr;
+	Pages *adjusters_ = nullptr;
 };
 
 } // namespace bmagicam::ui

@@ -12,7 +12,8 @@ class CameraControls;
 
 // The phone as it was before obs-bmagicam first changed it (RST-2, docs/architecture.md, "Reset and restore"): a
 // phone preset "Before obs-bmagicam", which the user can also load in the app without OBS, and a snapshot of every
-// setting the dock can change, in snapshots/<phone>.json in the module's config folder.
+// setting the dock can change, in snapshots/<phone>.json in the module's config folder. The livestream destination is
+// the session's to give back (CameraSession).
 
 // Saves the phone's state, unless this phone has a snapshot already. Called before the first change to a phone.
 void take_snapshot_if_new(const CameraClient &client, const std::string &phone_key);

@@ -5,12 +5,14 @@
 
 #include <doctest/doctest.h>
 
+#include <chrono>
 #include <cmath>
 #include <random>
 #include <vector>
 
-using bmagicam::estimate_lag;
+using bmagicam::correlate;
 using bmagicam::loudness;
+using bmagicam::peak_of;
 
 namespace {
 
@@ -47,14 +49,22 @@ std::vector<float> heard_later(const std::vector<float> &sound, size_t lag, unsi
 
 } // namespace
 
+constexpr int kMaxLag = kRate * 3 / 2;
+
+bmagicam::LagEstimate estimate(const std::vector<float> &earlier, const std::vector<float> &later, size_t begin,
+			       size_t end)
+{
+	return peak_of(correlate(earlier, later, begin, end, kMaxLag), kMaxLag);
+}
+
 TEST_CASE("the lag of the same sound heard later is found within a sample")
 {
 	const std::vector<float> microphone = bursts(kRate * 8, 1);
 	for (size_t lag : {0, 120, 3300, 9000}) {
 		const std::vector<float> camera = heard_later(microphone, lag, 2);
-		const auto estimate = estimate_lag(microphone, camera, kRate * 2, kRate * 6, kRate * 3 / 2);
-		CHECK(std::abs(estimate.lag - static_cast<double>(lag)) < 1.0);
-		CHECK(estimate.clarity > 2.0);
+		const auto found = estimate(microphone, camera, kRate * 2, kRate * 6);
+		CHECK(std::abs(found.lag - static_cast<double>(lag)) < 1.0);
+		CHECK(found.clarity > 8.0);
 	}
 }
 
@@ -62,16 +72,27 @@ TEST_CASE("a microphone that runs behind gives a negative lag")
 {
 	const std::vector<float> camera = bursts(kRate * 8, 3);
 	const std::vector<float> microphone = heard_later(camera, 400, 4);
-	const auto estimate = estimate_lag(microphone, camera, kRate * 2, kRate * 6, kRate * 3 / 2);
-	CHECK(std::abs(estimate.lag + 400) < 1.0);
+	const auto found = estimate(microphone, camera, kRate * 2, kRate * 6);
+	CHECK(std::abs(found.lag + 400) < 1.0);
 }
 
 TEST_CASE("unrelated sounds give no clear lag")
 {
 	const std::vector<float> microphone = bursts(kRate * 8, 5);
 	const std::vector<float> camera = bursts(kRate * 8, 6);
-	const auto estimate = estimate_lag(microphone, camera, kRate * 2, kRate * 6, kRate * 3 / 2);
-	CHECK(estimate.clarity < 2.0);
+	CHECK(estimate(microphone, camera, kRate * 2, kRate * 6).clarity < 8.0);
+}
+
+TEST_CASE("a window of a long recording is measured quickly")
+{
+	// Beyond 2^17 points FFmpeg's FFT falls back to a slow transform; a window must not need one
+	const std::vector<float> microphone = bursts(kRate * 20, 7);
+	const std::vector<float> camera = heard_later(microphone, 3300, 8);
+	const auto start = std::chrono::steady_clock::now();
+	const auto found = estimate(microphone, camera, kRate * 14, kRate * 18);
+	const auto elapsed = std::chrono::steady_clock::now() - start;
+	CHECK(std::abs(found.lag - 3300) < 1.0);
+	CHECK(elapsed < std::chrono::seconds(1));
 }
 
 TEST_CASE("loudness is the root mean square")

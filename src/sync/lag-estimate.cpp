@@ -10,14 +10,12 @@ extern "C" {
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstddef>
 #include <cstdlib>
 
 namespace bmagicam {
 
 namespace {
-
-// Peaks this close to the main one belong to it
-constexpr int kPeakWidth = 16;
 
 size_t fft_size(size_t length)
 {
@@ -29,22 +27,29 @@ size_t fft_size(size_t length)
 
 } // namespace
 
-LagEstimate estimate_lag(const std::vector<float> &earlier, const std::vector<float> &later, size_t begin, size_t end,
-			 int max_lag)
+std::vector<float> correlate(const std::vector<float> &earlier, const std::vector<float> &later, size_t begin,
+			     size_t end, int max_lag)
 {
-	LagEstimate estimate;
+	std::vector<float> result;
 	end = std::min(end, earlier.size());
 	if (begin >= end || later.empty() || max_lag <= 0)
-		return estimate;
+		return result;
 
-	// Room for the later signal and the largest lag either way, so the circular correlation does not wrap
-	const size_t size = fft_size(std::max(earlier.size(), later.size()) + 2 * static_cast<size_t>(max_lag));
+	// The window of the earlier signal, and of the later one only what the window can match within the lags. That
+	// keeps the transform short: FFmpeg's FFT is fast up to 2^17 points and falls back to a slow one beyond.
+	const size_t window = end - begin;
+	const size_t lags = 2 * static_cast<size_t>(max_lag);
+	const size_t size = fft_size(window + lags);
 	std::vector<AVComplexFloat> first(size, AVComplexFloat{0, 0});
 	std::vector<AVComplexFloat> second(size, AVComplexFloat{0, 0});
-	for (size_t i = begin; i < end; i++)
-		first[i].re = earlier[i];
-	for (size_t i = 0; i < later.size(); i++)
-		second[i].re = later[i];
+	for (size_t i = 0; i < window; i++)
+		first[i].re = earlier[begin + i];
+	// second[j] holds later[begin - max_lag + j]
+	for (size_t j = 0; j < window + lags; j++) {
+		const auto index = static_cast<std::ptrdiff_t>(begin + j) - max_lag;
+		if (index >= 0 && static_cast<size_t>(index) < later.size())
+			second[j].re = later[static_cast<size_t>(index)];
+	}
 
 	AVTXContext *forward = nullptr;
 	AVTXContext *inverse = nullptr;
@@ -58,7 +63,7 @@ LagEstimate estimate_lag(const std::vector<float> &earlier, const std::vector<fl
 		    0) {
 		av_tx_uninit(&forward);
 		av_tx_uninit(&inverse);
-		return estimate;
+		return result;
 	}
 
 	std::vector<AVComplexFloat> first_spectrum(size);
@@ -85,21 +90,29 @@ LagEstimate estimate_lag(const std::vector<float> &earlier, const std::vector<fl
 	av_tx_uninit(&forward);
 	av_tx_uninit(&inverse);
 
+	// correlation[lag + max_lag] compares earlier[t] with later[t + lag]
+	result.resize(lags + 1);
+	for (size_t i = 0; i <= lags; i++)
+		result[i] = correlation[i].re;
+	return result;
+}
+
+LagEstimate peak_of(const std::vector<float> &correlation, int max_lag)
+{
+	LagEstimate estimate;
+	if (correlation.size() != 2 * static_cast<size_t>(max_lag) + 1)
+		return estimate;
 	const auto at = [&](int lag) {
-		return correlation[static_cast<size_t>((lag % static_cast<int>(size) + static_cast<int>(size)) %
-						       static_cast<int>(size))]
-			.re;
+		return static_cast<double>(correlation[static_cast<size_t>(std::clamp(lag + max_lag, 0, 2 * max_lag))]);
 	};
-	int best = 0;
+	int best = -max_lag;
+	double squares = 0;
 	for (int lag = -max_lag; lag <= max_lag; lag++) {
+		squares += at(lag) * at(lag);
 		if (at(lag) > at(best))
 			best = lag;
 	}
-	float runner_up = 0;
-	for (int lag = -max_lag; lag <= max_lag; lag++) {
-		if (std::abs(lag - best) > kPeakWidth)
-			runner_up = std::max(runner_up, at(lag));
-	}
+	const double rms = std::sqrt(squares / static_cast<double>(correlation.size()));
 
 	// Between samples, from a parabola through the peak and its neighbours
 	const double left = at(best - 1);
@@ -108,7 +121,7 @@ LagEstimate estimate_lag(const std::vector<float> &earlier, const std::vector<fl
 	const double curve = left - 2 * center + right;
 	const double offset = std::abs(curve) > 1e-12 ? 0.5 * (left - right) / curve : 0;
 	estimate.lag = best + std::clamp(offset, -0.5, 0.5);
-	estimate.clarity = runner_up > 0 ? center / runner_up : 0;
+	estimate.clarity = rms > 0 ? center / rms : 0;
 	return estimate;
 }
 

@@ -5,6 +5,7 @@
 
 #include "lag-estimate.hpp"
 
+#include <plugin-support.h>
 #include <util/platform.h>
 
 #include <algorithm>
@@ -24,12 +25,13 @@ constexpr uint64_t kLeadNs = 2'000'000'000;
 constexpr uint64_t kTailNs = 3'000'000'000;
 // The lag is searched within ±1.5 s
 constexpr int kMaxLag = kRate * 3 / 2;
-// Overlapping parts of the recording, each measured on its own; two in a row must agree
+// Overlapping parts of the recording, each correlated on its own
 constexpr size_t kWindow = kRate * 4;
 constexpr size_t kHop = kRate * 2;
+// The windows' lags that count as the same
 constexpr double kAgreement = kRate * 0.005;
-// A peak this many times higher than the rest is clear (SYN-3)
-constexpr double kClearPeak = 2.0;
+// The summed correlation's peak against its RMS: speech heard by both measured 15, unrelated sound 4 to 6 (SYN-3)
+constexpr double kClearPeak = 8.0;
 // Quieter than about -60 dBFS is silence
 constexpr double kSilence = 0.001;
 
@@ -130,30 +132,43 @@ MicrophoneSync::Outcome MicrophoneSync::finish()
 
 	const size_t first = kLeadNs / kBinNs;
 	const size_t last = first + static_cast<size_t>(kListenTime.count()) * kRate;
-	bool heard = false;
-	bool have_previous = false;
-	double previous = 0;
+	std::vector<float> total;
+	std::vector<double> window_lags;
 	for (size_t begin = first; begin + kWindow <= last; begin += kHop) {
 		const size_t end = begin + kWindow;
-		if (loudness(microphone, begin, end) < kSilence ||
-		    loudness(camera, begin, std::min(camera.size(), end + kMaxLag)) < kSilence) {
-			have_previous = false;
+		const double microphone_level = loudness(microphone, begin, end);
+		const double camera_level = loudness(camera, begin, std::min(camera.size(), end + kMaxLag));
+		if (microphone_level < kSilence || camera_level < kSilence) {
+			obs_log(LOG_INFO, "microphone sync: window at %.0f s: too quiet (%.4f, %.4f)",
+				static_cast<double>(begin - first) / kRate, microphone_level, camera_level);
 			continue;
 		}
-		heard = true;
-		const LagEstimate estimate = estimate_lag(microphone, camera, begin, end, kMaxLag);
-		if (estimate.clarity < kClearPeak) {
-			have_previous = false;
+		const std::vector<float> correlation = correlate(microphone, camera, begin, end, kMaxLag);
+		if (correlation.empty())
 			continue;
-		}
-		if (have_previous && std::abs(estimate.lag - previous) <= kAgreement) {
-			const double lag = (estimate.lag + previous) / 2;
-			return {Result::Measured, static_cast<int64_t>(std::llround(lag * kBinNs))};
-		}
-		previous = estimate.lag;
-		have_previous = true;
+		const LagEstimate estimate = peak_of(correlation, kMaxLag);
+		obs_log(LOG_INFO, "microphone sync: window at %.0f s: lag %.1f ms, clarity %.1f",
+			static_cast<double>(begin - first) / kRate, estimate.lag * 1000 / kRate, estimate.clarity);
+		window_lags.push_back(estimate.lag);
+		if (total.empty())
+			total.assign(correlation.size(), 0);
+		for (size_t lag = 0; lag < correlation.size(); lag++)
+			total[lag] += correlation[lag];
 	}
-	return {heard ? Result::Unclear : Result::Silence, 0};
+	if (window_lags.empty())
+		return {Result::Silence, 0};
+
+	// The windows together: the same sound adds up at its lag while unrelated sound does not. Two windows must also
+	// find that lag on their own (SYN-3).
+	const LagEstimate estimate = peak_of(total, kMaxLag);
+	const auto agreeing = std::count_if(window_lags.begin(), window_lags.end(),
+					    [&](double lag) { return std::abs(lag - estimate.lag) <= kAgreement; });
+	obs_log(LOG_INFO, "microphone sync: lag %.1f ms, clarity %.1f, %d of %d windows agree",
+		estimate.lag * 1000 / kRate, estimate.clarity, static_cast<int>(agreeing),
+		static_cast<int>(window_lags.size()));
+	if (estimate.clarity < kClearPeak || agreeing < 2)
+		return {Result::Unclear, 0};
+	return {Result::Measured, static_cast<int64_t>(std::llround(estimate.lag * kBinNs))};
 }
 
 } // namespace bmagicam
