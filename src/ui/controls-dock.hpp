@@ -9,6 +9,8 @@
 #include <QTimer>
 #include <QWidget>
 
+#include <functional>
+
 class QCheckBox;
 class QComboBox;
 class QLabel;
@@ -49,6 +51,11 @@ private:
 	void follow_scene_selection();
 	void open_menu();
 	void reset_to_defaults();
+	void restore_settings();
+	void save_preset();
+	// Runs a step on the phone in the background, then shows how it went
+	void run_on_phone(const QString &running, std::function<bool()> step, const char *done_key,
+			  const char *failed_key);
 
 	QComboBox *picker_ = nullptr;
 	QLabel *state_ = nullptr;

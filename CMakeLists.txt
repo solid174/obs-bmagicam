@@ -82,6 +82,8 @@ target_sources(
     src/camera/looks.hpp
     src/camera/network.cpp
     src/camera/network.hpp
+    src/camera/phone-snapshot.cpp
+    src/camera/phone-snapshot.hpp
     src/camera/stream-presets.cpp
     src/camera/stream-presets.hpp
     src/camera/streaming-xml.cpp

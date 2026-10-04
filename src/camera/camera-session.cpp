@@ -5,6 +5,7 @@
 
 #include "background-work.hpp"
 #include "network.hpp"
+#include "phone-snapshot.hpp"
 #include "stream-presets.hpp"
 #include "streaming-xml.hpp"
 #include "values.hpp"
@@ -77,11 +78,11 @@ bool upload_destination(const CameraClient &client, const std::string &service, 
 		.ok();
 }
 
-// The phone's own livestream destinations, saved before the session chooses its own, so that they can be given back
-// even after a crash. Kept in the module's config folder, by phone.
+// The phone's own livestream destination and video format, saved before the session changes them, so that they can be
+// given back even after a crash. Kept in the module's config folder, by phone.
 class SavedDestinations {
 public:
-	static void save(const std::string &phone, const nlohmann::json &destination)
+	static void save(const std::string &phone, const nlohmann::json &destination, const std::string &video_format)
 	{
 		std::lock_guard lock(mutex());
 		nlohmann::json all = load();
@@ -89,6 +90,7 @@ public:
 			{"platform", string_at(destination, "platform")},
 			{"server", string_at(destination, "server")},
 			{"quality", string_at(destination, "quality")},
+			{"videoFormat", video_format},
 		};
 		store(all);
 	}
@@ -213,6 +215,8 @@ struct CameraSession::Core final : StreamReceiver::Sink {
 	std::string changed_phone;
 	std::string changed_phone_key;
 	std::string changed_platform;
+	// The video format the session gave the phone, if it has it
+	std::string changed_format;
 	bool phone_streaming = false;
 	bool receiving = false;
 	StreamReceiver::Settings receiving_settings;
@@ -421,12 +425,15 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 	const std::string platform = streaming_platform(service);
 	const std::string url = "srt://" + local_address + ":" + std::to_string(settings.receiver.port);
 
-	// Keep the phone's own destination before anything here changes it. Only on the first setup: replacing an
-	// outdated destination can leave the phone on another one.
+	// Keep the phone's own destination and format before anything here changes them. Only on the first setup:
+	// replacing an outdated destination can leave the phone on another one.
 	if (changed_phone_key != phone_key) {
+		// The very first time, everything the user could change too (RST-2)
+		take_snapshot_if_new(client, phone_key);
 		const ApiReply current = client.get("/livestreams/0/activePlatform");
 		if (current.ok() && string_at(current.body, "platform") != platform)
-			SavedDestinations::save(phone_key, current.body);
+			SavedDestinations::save(phone_key, current.body,
+						string_at(client.get("/system/videoFormat").body, "name"));
 	}
 	changed_phone = address;
 	changed_phone_key = phone_key;
@@ -440,9 +447,13 @@ bool CameraSession::Core::stream(const Settings &settings, uint64_t current_gene
 
 	// The stream follows the camera's video format, so the preset sets it
 	const StreamPreset &preset = stream_preset(settings.preset);
-	if (string_at(client.get("/system/videoFormat").body, "name") != preset.video_format) {
+	if (string_at(client.get("/system/videoFormat").body, "name") == preset.video_format) {
+		// Also after a crash left it so: the saved format is still given back
+		changed_format = preset.video_format;
+	} else {
 		const ApiReply format = client.put("/system/videoFormat", {{"name", preset.video_format}});
 		if (format.ok()) {
+			changed_format = preset.video_format;
 			wait_for_answer(client);
 		} else if (refused_format != preset.video_format) {
 			obs_log(LOG_WARNING, "the phone kept its video format instead of %s (%d)", preset.video_format,
@@ -561,13 +572,23 @@ void CameraSession::Core::put_phone_back()
 
 	// A phone that is gone keeps the saved destination for the next time
 	const nlohmann::json previous = SavedDestinations::get(changed_phone_key);
-	if (previous.is_object() && client.put("/livestreams/0/activePlatform", previous).ok()) {
+	const nlohmann::json destination = {{"platform", string_at(previous, "platform")},
+					    {"server", string_at(previous, "server")},
+					    {"quality", string_at(previous, "quality")}};
+	if (previous.is_object() && client.put("/livestreams/0/activePlatform", destination).ok()) {
 		SavedDestinations::forget(changed_phone_key);
 		client.remove("/livestreams/customPlatforms/" + url_path_segment(changed_platform));
+
+		// The phone's own video format, unless the user chose another on the phone since
+		const std::string format = string_at(previous, "videoFormat");
+		if (!format.empty() && format != changed_format &&
+		    string_at(client.get("/system/videoFormat").body, "name") == changed_format)
+			client.put("/system/videoFormat", {{"name", format}});
 	}
 	changed_phone.clear();
 	changed_phone_key.clear();
 	changed_platform.clear();
+	changed_format.clear();
 }
 
 CameraSession::CameraSession(Output &output, StreamReceiver::Clock clock) : core_(std::make_shared<Core>(output, clock))

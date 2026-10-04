@@ -50,9 +50,12 @@ LagEstimate estimate_lag(const std::vector<float> &earlier, const std::vector<fl
 	AVTXContext *inverse = nullptr;
 	av_tx_fn forward_fn = nullptr;
 	av_tx_fn inverse_fn = nullptr;
+	// The buffers are plain vectors, not aligned for SIMD
 	const float scale = 1.0f;
-	if (av_tx_init(&forward, &forward_fn, AV_TX_FLOAT_FFT, 0, static_cast<int>(size), &scale, 0) < 0 ||
-	    av_tx_init(&inverse, &inverse_fn, AV_TX_FLOAT_FFT, 1, static_cast<int>(size), &scale, 0) < 0) {
+	if (av_tx_init(&forward, &forward_fn, AV_TX_FLOAT_FFT, 0, static_cast<int>(size), &scale, AV_TX_UNALIGNED) <
+		    0 ||
+	    av_tx_init(&inverse, &inverse_fn, AV_TX_FLOAT_FFT, 1, static_cast<int>(size), &scale, AV_TX_UNALIGNED) <
+		    0) {
 		av_tx_uninit(&forward);
 		av_tx_uninit(&inverse);
 		return estimate;

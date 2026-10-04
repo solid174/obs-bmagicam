@@ -6,9 +6,11 @@
 #include "camera-link.hpp"
 #include "dock-kit.hpp"
 #include "panels.hpp"
+#include "setup-guide.hpp"
 #include "../camera/background-work.hpp"
 #include "../camera/camera-controls.hpp"
 #include "../camera/camera-routines.hpp"
+#include "../camera/phone-snapshot.hpp"
 #include "../camera/values.hpp"
 #include "../source/camera-source.hpp"
 
@@ -17,6 +19,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QInputDialog>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -27,6 +30,7 @@
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QToolButton>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <vector>
@@ -465,11 +469,117 @@ void ControlsDock::open_menu()
 		show_message(text("Dock.SetUp.Running"));
 		run_set_up_for_streaming(context, nullptr);
 	});
+	// The phone's own presets (docs/ui.md, "Header, menu and status line")
+	QMenu *presets = menu.addMenu(text("Dock.Presets"));
+	presets->setEnabled(ready);
+	const std::vector<std::string> names = controls ? strings_at(controls->get("/presets"), "presets")
+							: std::vector<std::string>();
+	QMenu *load = presets->addMenu(text("Dock.Presets.Load"));
+	QMenu *remove = presets->addMenu(text("Dock.Presets.Delete"));
+	load->setEnabled(!names.empty());
+	remove->setEnabled(!names.empty());
+	for (const std::string &name : names) {
+		const QString label = QString::fromStdString(name);
+		connect(load->addAction(label), &QAction::triggered, this, [this, controls, name] {
+			run_on_phone(
+				text("Dock.Presets.Loading"),
+				[controls, name] {
+					return controls->put_now("/presets/active", {{"preset", name}}).ok();
+				},
+				"Dock.Presets.Loaded", "Dock.Presets.Failed");
+		});
+		connect(remove->addAction(label), &QAction::triggered, this, [this, controls, name, label] {
+			if (QMessageBox::question(this, text("Dock.Presets.Delete.Title"),
+						  text("Dock.Presets.Delete.Question").arg(label)) != QMessageBox::Yes)
+				return;
+			run_on_phone(
+				text("Dock.Presets.Deleting"),
+				[controls, name] {
+					const bool done =
+						controls->remove_now("/presets/" + QUrl::toPercentEncoding(
+											   QString::fromStdString(name))
+											   .toStdString())
+							.ok();
+					controls->get_now("/presets");
+					return done;
+				},
+				"Dock.Presets.Deleted", "Dock.Presets.Failed");
+		});
+	}
+	connect(presets->addAction(text("Dock.Presets.Save")), &QAction::triggered, this, [this] { save_preset(); });
+
 	menu.addSeparator();
 	QAction *reset = menu.addAction(text("Dock.Reset"));
 	reset->setEnabled(ready);
 	connect(reset, &QAction::triggered, this, [this] { reset_to_defaults(); });
+	QAction *restore = menu.addAction(text("Dock.Restore"));
+	OBSDataAutoRelease settings = source ? obs_source_get_settings(source) : nullptr;
+	const std::string phone = settings ? obs_data_get_string(settings, "phone") : "";
+	const std::string phone_key = phone == "manual" ? std::string(obs_data_get_string(settings, "address")) : phone;
+	restore->setEnabled(ready && has_snapshot(phone_key));
+	connect(restore, &QAction::triggered, this, [this] { restore_settings(); });
+	menu.addSeparator();
+	connect(menu.addAction(text("Camera.SetupGuide")), &QAction::triggered, this, [this] {
+		auto guide = new SetupGuideDialog(this);
+		guide->setAttribute(Qt::WA_DeleteOnClose);
+		guide->show();
+	});
 	menu.exec(menu_->mapToGlobal(QPoint(0, menu_->height())));
+}
+
+void ControlsDock::run_on_phone(const QString &running, std::function<bool()> step, const char *done_key,
+				const char *failed_key)
+{
+	show_message(running);
+	run_in_background([step = std::move(step), guard = QPointer<ControlsDock>(this), done_key, failed_key] {
+		const bool done = step();
+		QMetaObject::invokeMethod(
+			qApp,
+			[guard, done, done_key, failed_key] {
+				if (guard)
+					guard->show_message(text(done ? done_key : failed_key));
+			},
+			Qt::QueuedConnection);
+	});
+}
+
+void ControlsDock::save_preset()
+{
+	OBSSourceAutoRelease source = obs_weak_source_get_source(source_);
+	const std::shared_ptr<CameraControls> controls = camera_controls(source);
+	if (!controls)
+		return;
+	bool ok = false;
+	const QString name = QInputDialog::getText(this, text("Dock.Presets.Save.Title"),
+						   text("Dock.Presets.Save.Name"), QLineEdit::Normal, QString(), &ok)
+				     .trimmed();
+	if (!ok || name.isEmpty())
+		return;
+	const std::string path = "/presets/" + QUrl::toPercentEncoding(name).toStdString();
+	run_on_phone(
+		text("Dock.Presets.Saving"),
+		[controls, path] {
+			const bool done = controls->put_now(path, nullptr).ok();
+			controls->get_now("/presets");
+			return done;
+		},
+		"Dock.Presets.Saved", "Dock.Presets.Failed");
+}
+
+void ControlsDock::restore_settings()
+{
+	OBSSourceAutoRelease source = obs_weak_source_get_source(source_);
+	const std::shared_ptr<CameraControls> controls = camera_controls(source);
+	if (!controls)
+		return;
+	if (QMessageBox::question(this, text("Dock.Restore.Title"), text("Dock.Restore.Question")) != QMessageBox::Yes)
+		return;
+	OBSDataAutoRelease settings = obs_source_get_settings(source);
+	const std::string phone = obs_data_get_string(settings, "phone");
+	const std::string phone_key = phone == "manual" ? std::string(obs_data_get_string(settings, "address")) : phone;
+	run_on_phone(
+		text("Dock.Restore.Running"), [controls, phone_key] { return restore_snapshot(*controls, phone_key); },
+		"Dock.Restore.Done", "Dock.Restore.Failed");
 }
 
 void ControlsDock::reset_to_defaults()
@@ -480,17 +590,9 @@ void ControlsDock::reset_to_defaults()
 		return;
 	if (QMessageBox::question(this, text("Dock.Reset.Title"), text("Dock.Reset.Question")) != QMessageBox::Yes)
 		return;
-	show_message(text("Dock.Reset.Running"));
-	run_in_background([controls, guard = QPointer<ControlsDock>(this)] {
-		const bool complete = bmagicam::reset_to_defaults(*controls);
-		QMetaObject::invokeMethod(
-			qApp,
-			[guard, complete] {
-				if (guard)
-					guard->show_message(text(complete ? "Dock.Reset.Done" : "Dock.Reset.Failed"));
-			},
-			Qt::QueuedConnection);
-	});
+	run_on_phone(
+		text("Dock.Reset.Running"), [controls] { return bmagicam::reset_to_defaults(*controls); },
+		"Dock.Reset.Done", "Dock.Reset.Failed");
 }
 
 } // namespace bmagicam::ui

@@ -568,6 +568,18 @@ ApiReply CameraControls::get_now(const std::string &path)
 	return reply;
 }
 
+ApiReply CameraControls::remove_now(const std::string &path)
+{
+	std::string host;
+	int port = 4444;
+	{
+		std::lock_guard lock(core_->mutex);
+		host = core_->host;
+		port = core_->port;
+	}
+	return host.empty() ? ApiReply() : CameraClient(host, port).remove(path);
+}
+
 bool CameraControls::wait_for(const std::string &path, const std::function<bool(const nlohmann::json &)> &test,
 			      std::chrono::milliseconds limit)
 {

@@ -32,3 +32,12 @@ target_compile_definitions(obs-bmagicam-tests PRIVATE LOOKS_FILE="${CMAKE_SOURCE
 target_link_libraries(obs-bmagicam-tests PRIVATE doctest::doctest nlohmann_json::nlohmann_json FFmpeg::avutil)
 
 add_test(NAME obs-bmagicam-tests COMMAND obs-bmagicam-tests)
+
+# The lag estimate uses libavutil, which comes from obs-deps on macOS and Windows and is not on the loader's path there
+get_filename_component(_avutil_dir "${FFmpeg_avutil_LIBRARY}" DIRECTORY)
+if(APPLE)
+  set_target_properties(obs-bmagicam-tests PROPERTIES BUILD_RPATH "${_avutil_dir}")
+elseif(WIN32)
+  file(TO_NATIVE_PATH "${_avutil_dir}/../bin" _avutil_bin)
+  set_tests_properties(obs-bmagicam-tests PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${_avutil_bin}")
+endif()

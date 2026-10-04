@@ -50,6 +50,7 @@ public:
 	// property's value follows a successful write.
 	ApiReply put_now(const std::string &path, const nlohmann::json &body);
 	ApiReply get_now(const std::string &path);
+	ApiReply remove_now(const std::string &path);
 	// Waits until the property's value satisfies the test, or the time is up.
 	bool wait_for(const std::string &path, const std::function<bool(const nlohmann::json &)> &test,
 		      std::chrono::milliseconds limit);
