@@ -174,7 +174,7 @@ Measured on the test phone ([camera-api.md](camera-api.md#latency)):
 | OBS render and display (one or two frames at 60 fps) | 17–33 ms |
 | For comparison: the same through OBS's Media Source instead of the plugin's receiver | about 1240 ms |
 
-That is about 440–470 ms end to end at 1080p60, over the NFR-2 target of 400 ms. The speaker delay inside the 350 ms is unknown, so V-1 measures video glass to glass, and V-2 and V-11 look for savings on the phone side. The 50 ms buffer has room too: decoding takes 5 ms at 1080p, so it is tuned down once V-1 shows the margin. 4K adds about 180 ms (measured).
+That is about 440–470 ms end to end at 1080p60, over the NFR-2 target of 400 ms. The speaker delay inside the 350 ms is unknown, so V-1 measures video glass to glass, and V-2 and V-11 look for savings on the phone side. Measured on 2026-10-04 (V-1): a white flash on the computer's screen reached OBS's timeline after 387 ms (median of 25, 370–404 ms) with the phone held still on its own hotspot, and after 456 ms with the phone handheld and packets lost. With OBS's display that is about 400–420 ms glass to glass, so the estimate above was 40–50 ms high. The 50 ms buffer has room too: decoding takes 5 ms at 1080p, so it is tuned down once V-1 shows the margin. 4K adds about 180 ms (measured).
 
 ## Looks
 
@@ -211,7 +211,7 @@ Each step goes through the same coalescer, and every value stays adjustable in t
 
 ## Microphone sync
 
-A microphone connected to the computer reaches OBS within a few milliseconds, while the iPhone's picture arrives about 0.45 s after the moment it shows ([Latency budget](#latency-budget)). The iPhone's own audio travels with its picture and stays in sync; a computer microphone runs ahead and has to be delayed (SYN-1).
+A microphone connected to the computer reaches OBS within a few milliseconds, while the iPhone's picture arrives about 0.4 s after the moment it shows ([Latency budget](#latency-budget)). The iPhone's own audio travels with its picture and stays in sync; a computer microphone runs ahead and has to be delayed (SYN-1).
 
 - **Capture.** `obs_source_add_audio_capture_callback` on the iPhone Camera source and on the chosen microphone delivers both with their OBS timestamps, before any Sync Offset: the iPhone's as the receiver mapped them, the microphone's as its source stamped them.
 - **Measure.** Both are mixed to mono and resampled to 8 kHz. Over an 8-second window, a cross-correlation with phase transform (GCC-PHAT), computed with FFmpeg's FFT (`av_tx` in libavutil, no new dependency), finds the lag at which the two match, searched within ±1.5 s. Speech and claps give a sharp peak even though the two microphones sound different.
@@ -332,7 +332,7 @@ To settle in development, in the milestone named:
 
 | # | Question | Milestone |
 | --- | --- | --- |
-| V-1 | Video latency glass to glass with the plugin's receiver (NFR-2) | M1 |
+| V-1 | Video latency glass to glass with the plugin's receiver (NFR-2). Measured: 387 ms to OBS's timeline, about 400–420 ms with OBS's display ([Latency budget](#latency-budget)) | M1 |
 | V-2 | Does a low-latency profile exist in Streaming XML (`lowLatency` appears in the JSON profile schema), and how much does it save? | M1 |
 | V-3 | Stream codec: H.264 when the camera records H.264? Does the profile's `codec` matter? | M1 |
 | V-4 | How to get a portrait stream (vertical mode produced 1920×1080 landscape, filling the frame) | M1 |
@@ -343,11 +343,11 @@ To settle in development, in the milestone named:
 | V-9 | Units of `shutterAngle` on PUT | M2 |
 | V-10 | Writing `normalized` instead of `normalised` on lens endpoints | M2 |
 | V-11 | Does the phone hold SRT latency at 120 ms or more regardless of the PC's setting? | M1 |
-| V-12 | macOS Local Network permission for OBS: OBS 32.2.2 has no `NSLocalNetworkUsageDescription`. Does the prompt appear, and do Bonjour and outgoing connections work from inside OBS? | M1 |
+| V-12 | macOS Local Network permission for OBS: OBS 32.2.2 has no `NSLocalNetworkUsageDescription`. Does the prompt appear, and do Bonjour and outgoing connections work from inside OBS? Partly answered: Bonjour, the phone's API and the stream all worked inside OBS 32.2.2 on macOS 27 (2026-10-04); whether a prompt appears on first use was not seen | M1 |
 | V-13 | Which parameters auto exposure drives (`type`), and whether face-tracking autofocus exists on the back cameras | M2 |
-| V-14 | What happens to a running stream when the app goes to the background | M1 |
+| V-14 | What happens to a running stream when the app goes to the background. Answered: the app's server and the stream stop (also when the phone locks), the receiver closes the silent connection, and when the app is back on screen the stream returns within about 2 s | M1 |
 | V-15 | Stabilization: how much each mode crops, and whether a mode adds delay to the livestream. How the API sets the modes is answered in [Stabilization](#stabilization) | M1 |
-| V-16 | Lip sync: offset between sound and picture in a recording, at the start and after two hours, against NFR-6 | M1 |
+| V-16 | Lip sync: offset between sound and picture in a recording, at the start and after two hours, against NFR-6. At the start (2026-10-04, a flash and a beep from the computer, 25 times): audio 53 ms behind the picture on OBS's timeline (37–70 ms), within NFR-6. The steady offset matches the 2112-sample (44 ms) delay of Apple's AAC encoder, which the stream's timestamps would then leave out; a clip recorded by Blackmagic Camera itself, which corrects it, would confirm. The computer's own screen-to-speaker offset is inside the number. After two hours: open | M1 |
 | V-17 | Does the app's Remote Password (Settings → Remote Camera Control) protect the HTTP API, and how is it sent? | M1 |
 | V-18 | How far apart audio and video arrive relative to their timestamps in the phone's stream. Answered: video 15–35 ms after audio, so video sets the delay and audio adds none | M1 |
 
