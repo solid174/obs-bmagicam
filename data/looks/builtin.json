@@ -1,0 +1,49 @@
+{
+	"looks": [
+		{
+			"id": "natural",
+			"values": {}
+		},
+		{
+			"id": "studio",
+			"values": {
+				"contrast": { "pivot": 0.43, "adjust": 1.08 },
+				"color": { "saturation": 1.12 }
+			}
+		},
+		{
+			"id": "warm",
+			"values": {
+				"contrast": { "pivot": 0.43, "adjust": 1.08 },
+				"color": { "saturation": 1.12 },
+				"gain": { "red": 1.03, "blue": 0.96 }
+			}
+		},
+		{
+			"id": "vivid",
+			"values": {
+				"contrast": { "pivot": 0.43, "adjust": 1.14 },
+				"color": { "saturation": 1.28 },
+				"gamma": { "luma": 0.02 }
+			}
+		},
+		{
+			"id": "soft",
+			"values": {
+				"contrast": { "adjust": 0.94 },
+				"color": { "saturation": 1.08 },
+				"lift": { "luma": 0.015 },
+				"gain": { "luma": 0.98 }
+			}
+		},
+		{
+			"id": "cinematic",
+			"values": {
+				"contrast": { "adjust": 1.10 },
+				"color": { "saturation": 0.92 },
+				"lift": { "blue": 0.01 },
+				"gain": { "red": 1.02, "blue": 0.98 }
+			}
+		}
+	]
+}

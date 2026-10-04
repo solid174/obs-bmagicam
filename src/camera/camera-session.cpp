@@ -7,6 +7,7 @@
 #include "network.hpp"
 #include "stream-presets.hpp"
 #include "streaming-xml.hpp"
+#include "values.hpp"
 #include "../discovery/phone-browser.hpp"
 #include "../phone/camera-client.hpp"
 #include "../stream/ffmpeg-check.hpp"
@@ -42,13 +43,6 @@ constexpr auto kConnectWait = 5s;
 // The phone's server pauses for a few seconds after a video format change
 constexpr auto kFormatChangePause = 10s;
 constexpr std::chrono::milliseconds kRetryPauses[] = {500ms, 1s, 2s, 4s, 5s};
-
-std::string string_at(const nlohmann::json &object, const char *key)
-{
-	if (object.is_object() && object.contains(key) && object[key].is_string())
-		return object[key].get<std::string>();
-	return {};
-}
 
 std::string url_path_segment(const std::string &text)
 {

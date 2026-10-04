@@ -21,6 +21,9 @@ public:
 		std::string phone_name;
 		std::string address;
 		std::string preset;
+		std::string look;
+		// Set up for streaming once the phone is connected (CTL-8)
+		bool set_up = true;
 	};
 	Choice choice;
 

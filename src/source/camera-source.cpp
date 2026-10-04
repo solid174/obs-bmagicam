@@ -3,12 +3,16 @@
 
 #include "camera-source.hpp"
 
+#include "../camera/background-work.hpp"
 #include "../camera/camera-controls.hpp"
+#include "../camera/camera-routines.hpp"
 #include "../camera/camera-session.hpp"
+#include "../camera/look-library.hpp"
 #include "../camera/stream-presets.hpp"
 #include "../discovery/phone-browser.hpp"
 
 #include <obs-module.h>
+#include <obs.hpp>
 #include <plugin-support.h>
 #include <util/platform.h>
 
@@ -18,6 +22,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <mutex>
 #include <set>
@@ -36,6 +41,16 @@ constexpr const char *kPreset = "preset";
 constexpr const char *kPort = "port";
 constexpr const char *kLatency = "latency";
 constexpr const char *kHardwareDecoding = "hardware_decoding";
+constexpr const char *kLook = "look";
+// The phone's color as last seen, saved with the scene collection
+constexpr const char *kColor = "color";
+// Set by Add iPhone Camera: Set up for streaming once the phone is connected
+constexpr const char *kSetUpPending = "set_up_pending";
+constexpr const char *kAdvanced = "advanced";
+constexpr const char *kOpenControls = "open_controls";
+constexpr const char *kSetupGuide = "setup_guide";
+
+CameraSourceActions source_actions;
 
 // Automatic ports are the first free ones from here; the setup guide opens this range in firewalls
 constexpr int kFirstPort = 9710;
@@ -128,7 +143,9 @@ private:
 	}
 };
 
-std::string status_text(const CameraSession::Status &status)
+} // namespace
+
+std::string camera_status_text(const CameraSession::Status &status)
 {
 	switch (status.state) {
 	case CameraSession::State::NoPhone:
@@ -168,32 +185,57 @@ std::string status_text(const CameraSession::Status &status)
 	return {};
 }
 
+namespace {
+
+// Histograms are computed from every fourth frame, and only while someone looks at them
+constexpr int kHistogramEvery = 4;
+constexpr uint64_t kHistogramWantedNs = 2'000'000'000;
+
+// What waits for the phone's first connection in this OBS session: the source's color, and Set up for streaming when
+// the source was just added. Shared with the controls' listener, which may run after the source is gone.
+struct FirstConnection {
+	std::mutex mutex;
+	nlohmann::json color;
+	bool set_up = false;
+};
+
 class CameraSource final : public CameraSession::Output {
 public:
 	CameraSource(obs_source_t *source, obs_data_t *settings)
 		: source_(source),
 		  controls_(std::make_shared<CameraControls>()),
+		  first_connection_(std::make_shared<FirstConnection>()),
 		  session_(*this, os_gettime_ns)
 	{
 		// New phones appear in an open properties window
 		discovery_listener_ =
 			PhoneBrowser::instance().listen([source] { obs_source_update_properties(source); });
+		controls_listener_ =
+			controls_->listen([first = first_connection_,
+					   weak = std::weak_ptr<CameraControls>(controls_)](const std::string &path) {
+				if (path.empty())
+					on_connection(*first, weak.lock());
+			});
 		update(settings);
 	}
 
 	~CameraSource() override
 	{
+		controls_->unlisten(controls_listener_);
 		PhoneBrowser::instance().unlisten(discovery_listener_);
 		Ports::release(port_);
 	}
 
 	void update(obs_data_t *settings);
+	void save(obs_data_t *settings) const;
 	void set_shown(bool shown) { session_.set_active(shown); }
 	void add_status(obs_properties_t *properties) const;
 	void focus_at(int32_t x, int32_t y);
 
 	const std::shared_ptr<CameraControls> &controls() const { return controls_; }
+	obs_source_t *obs_source() const { return source_; }
 	CameraSession::Status status() const { return session_.status(); }
+	Histogram histogram();
 
 	void session_video(const AVFrame &frame, uint64_t timestamp) override;
 	void session_audio(const float *const planes[2], uint32_t frames, uint64_t timestamp) override;
@@ -201,11 +243,22 @@ public:
 	void session_status_changed() override { obs_source_update_properties(source_); }
 
 private:
+	static void on_connection(FirstConnection &first, const std::shared_ptr<CameraControls> &controls);
+	void update_look(obs_data_t *settings);
+
 	obs_source_t *source_;
 	std::shared_ptr<CameraControls> controls_;
+	std::shared_ptr<FirstConnection> first_connection_;
+	int controls_listener_ = 0;
+	bool look_known_ = false;
+	std::string look_;
 	int discovery_listener_ = 0;
 	int port_ = 0;
 	bool logged_format_ = false;
+	std::mutex histogram_mutex_;
+	Histogram histogram_;
+	std::atomic<uint64_t> histogram_wanted_until_ = 0;
+	uint32_t histogram_frames_ = 0;
 	// Last, so that it ends first and stops calling back into this object
 	CameraSession session_;
 };
@@ -228,6 +281,77 @@ void CameraSource::update(obs_data_t *settings)
 	next.receiver.hardware_decoding = obs_data_get_bool(settings, kHardwareDecoding);
 	session_.update(next);
 	controls_->set_phone(next.phone_id, next.address);
+	update_look(settings);
+
+	if (obs_data_get_bool(settings, kSetUpPending)) {
+		obs_data_erase(settings, kSetUpPending);
+		std::lock_guard lock(first_connection_->mutex);
+		first_connection_->set_up = true;
+	}
+}
+
+// The source owns the look (docs/architecture.md, "What the plugin owns and what the phone owns"): its color goes to
+// the phone on the first connection in an OBS session, and whenever the user chooses another look
+void CameraSource::update_look(obs_data_t *settings)
+{
+	const std::string look = obs_data_get_string(settings, kLook);
+	if (look_known_ && look == look_)
+		return;
+	const bool first = !look_known_;
+	look_known_ = true;
+	look_ = look;
+
+	nlohmann::json color;
+	if (first) {
+		// The color saved with the scene collection includes changes made after the look was chosen
+		OBSDataAutoRelease saved = obs_data_get_obj(settings, kColor);
+		if (saved)
+			color = nlohmann::json::parse(obs_data_get_json(saved), nullptr, false);
+	}
+	if (!color.is_object()) {
+		const std::vector<Look> looks = all_looks();
+		const Look *chosen = find_look(looks, look);
+		color = chosen ? chosen->values : nlohmann::json();
+	}
+	if (!color.is_object())
+		return;
+
+	if (!first && controls_->connected()) {
+		const nlohmann::json current = current_color(*controls_);
+		if (current.is_null() || !same_color(current, color))
+			apply_color(*controls_, color);
+		return;
+	}
+	std::lock_guard lock(first_connection_->mutex);
+	first_connection_->color = color;
+}
+
+void CameraSource::on_connection(FirstConnection &first, const std::shared_ptr<CameraControls> &controls)
+{
+	if (!controls || !controls->connected())
+		return;
+	nlohmann::json color;
+	bool set_up = false;
+	{
+		std::lock_guard lock(first.mutex);
+		color = std::move(first.color);
+		first.color = nullptr;
+		set_up = first.set_up;
+		first.set_up = false;
+	}
+	if (color.is_object())
+		apply_color(*controls, color);
+	if (set_up)
+		run_in_background([controls] { set_up_for_streaming(*controls); });
+}
+
+void CameraSource::save(obs_data_t *settings) const
+{
+	const nlohmann::json color = current_color(*controls_);
+	if (color.is_null())
+		return;
+	OBSDataAutoRelease saved = obs_data_create_from_json(color.dump().c_str());
+	obs_data_set_obj(settings, kColor, saved);
 }
 
 void CameraSource::focus_at(int32_t x, int32_t y)
@@ -244,7 +368,7 @@ void CameraSource::focus_at(int32_t x, int32_t y)
 void CameraSource::add_status(obs_properties_t *properties) const
 {
 	const CameraSession::Status status = session_.status();
-	std::string text = status_text(status);
+	std::string text = camera_status_text(status);
 	if (!status.phone.empty() && status.state != CameraSession::State::Error)
 		text = status.phone + ": " + text;
 
@@ -266,6 +390,12 @@ void CameraSource::session_video(const AVFrame &frame, uint64_t timestamp)
 		return;
 	}
 
+	if (os_gettime_ns() < histogram_wanted_until_ && histogram_frames_++ % kHistogramEvery == 0) {
+		const Histogram histogram = histogram_of(frame);
+		std::lock_guard lock(histogram_mutex_);
+		histogram_ = histogram;
+	}
+
 	obs_source_frame2 out = {};
 	for (size_t i = 0; i < MAX_AV_PLANES; i++) {
 		out.data[i] = frame.data[i];
@@ -280,6 +410,13 @@ void CameraSource::session_video(const AVFrame &frame, uint64_t timestamp)
 					       out.color_range_min, out.color_range_max);
 	out.trc = static_cast<uint8_t>(obs_trc(frame));
 	obs_source_output_video2(source_, &out);
+}
+
+Histogram CameraSource::histogram()
+{
+	histogram_wanted_until_ = os_gettime_ns() + kHistogramWantedNs;
+	std::lock_guard lock(histogram_mutex_);
+	return histogram_;
 }
 
 void CameraSource::session_audio(const float *const planes[2], uint32_t frames, uint64_t timestamp)
@@ -315,6 +452,11 @@ void camera_update(void *data, obs_data_t *settings)
 	static_cast<CameraSource *>(data)->update(settings);
 }
 
+void camera_save(void *data, obs_data_t *settings)
+{
+	static_cast<CameraSource *>(data)->save(settings);
+}
+
 void camera_show(void *data)
 {
 	static_cast<CameraSource *>(data)->set_shown(true);
@@ -338,6 +480,16 @@ void camera_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, kPort, 0);
 	obs_data_set_default_int(settings, kLatency, 120);
 	obs_data_set_default_bool(settings, kHardwareDecoding, true);
+	obs_data_set_default_bool(settings, kAdvanced, false);
+}
+
+// The connection details stay out of sight until Advanced settings is on (UI-4)
+bool advanced_modified(obs_properties_t *properties, obs_property_t *, obs_data_t *settings)
+{
+	const bool advanced = obs_data_get_bool(settings, kAdvanced);
+	for (const char *name : {kPort, kLatency, kHardwareDecoding})
+		obs_property_set_visible(obs_properties_get(properties, name), advanced);
+	return true;
 }
 
 // Keeps the chosen phone's name for the "looking for" status, and shows the address field only for an address
@@ -389,6 +541,38 @@ obs_properties_t *camera_properties(void *data)
 	}
 	obs_property_set_long_description(preset, tooltip.c_str());
 
+	obs_property_t *look = obs_properties_add_list(properties, kLook, obs_module_text("Camera.Look"),
+						       OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+	obs_property_set_long_description(look, obs_module_text("Camera.Look.Tooltip"));
+	obs_property_list_add_string(look, obs_module_text("Look.Custom"), "");
+	for (const Look &item : all_looks()) {
+		const std::string label = item.builtin ? obs_module_text(("Look." + item.id).c_str()) : item.id;
+		obs_property_list_add_string(look, label.c_str(), item.id.c_str());
+	}
+
+	obs_property_t *controls = obs_properties_add_button2(
+		properties, kOpenControls, obs_module_text("Camera.OpenControls"),
+		[](obs_properties_t *, obs_property_t *, void *data) {
+			if (source_actions.open_controls && data)
+				source_actions.open_controls(static_cast<CameraSource *>(data)->obs_source());
+			return false;
+		},
+		data);
+	obs_property_set_long_description(controls, obs_module_text("Camera.OpenControls.Tooltip"));
+	obs_property_t *guide = obs_properties_add_button2(
+		properties, kSetupGuide, obs_module_text("Camera.SetupGuide"),
+		[](obs_properties_t *, obs_property_t *, void *) {
+			if (source_actions.open_setup_guide)
+				source_actions.open_setup_guide();
+			return false;
+		},
+		nullptr);
+	obs_property_set_long_description(guide, obs_module_text("Camera.SetupGuide.Tooltip"));
+
+	obs_property_t *advanced = obs_properties_add_bool(properties, kAdvanced, obs_module_text("Camera.Advanced"));
+	obs_property_set_long_description(advanced, obs_module_text("Camera.Advanced.Tooltip"));
+	obs_property_set_modified_callback(advanced, advanced_modified);
+
 	obs_property_t *port = obs_properties_add_int(properties, kPort, obs_module_text("Camera.Port"), 0, 65535, 1);
 	obs_property_set_long_description(port, obs_module_text("Camera.Port.Tooltip"));
 
@@ -422,8 +606,14 @@ void register_camera_source()
 	info.hide = camera_hide;
 	info.get_defaults = camera_defaults;
 	info.get_properties = camera_properties;
+	info.save = camera_save;
 	info.mouse_click = camera_mouse_click;
 	obs_register_source(&info);
+}
+
+void set_camera_source_actions(CameraSourceActions actions)
+{
+	source_actions = std::move(actions);
 }
 
 bool is_camera_source(obs_source_t *source)
@@ -444,6 +634,13 @@ CameraSession::Status camera_status(obs_source_t *source)
 	if (!is_camera_source(source))
 		return {};
 	return static_cast<CameraSource *>(obs_obj_get_data(source))->status();
+}
+
+Histogram camera_histogram(obs_source_t *source)
+{
+	if (!is_camera_source(source))
+		return {};
+	return static_cast<CameraSource *>(obs_obj_get_data(source))->histogram();
 }
 
 } // namespace bmagicam

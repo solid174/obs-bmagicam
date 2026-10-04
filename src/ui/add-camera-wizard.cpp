@@ -4,6 +4,8 @@
 #include "add-camera-wizard.hpp"
 
 #include "frontend.hpp"
+#include "setup-guide.hpp"
+#include "../camera/look-library.hpp"
 #include "../camera/stream-presets.hpp"
 #include "../discovery/phone-browser.hpp"
 #include "../source/camera-source.hpp"
@@ -13,14 +15,14 @@
 #include <obs.hpp>
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QFormLayout>
 #include <QDockWidget>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMainWindow>
-#include <QPixmap>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QTimer>
@@ -69,21 +71,6 @@ public:
 	{
 		setTitle(text("Wizard.Prepare.Title"));
 
-		auto steps = new QLabel(text("Wizard.Prepare.Steps"), this);
-		steps->setWordWrap(true);
-
-		auto screenshots = new QHBoxLayout();
-		for (const char *file : {"iphone-1-settings.png", "iphone-2-enable.png", "iphone-3-enabled.png"}) {
-			char *path = obs_module_file((std::string("images/setup/") + file).c_str());
-			QPixmap image(QString::fromUtf8(path ? path : ""));
-			bfree(path);
-			auto label = new QLabel(this);
-			const int height = fontMetrics().height() * 16;
-			label->setPixmap(image.scaledToHeight(height, Qt::SmoothTransformation));
-			screenshots->addWidget(label);
-		}
-		screenshots->addStretch();
-
 		status_ = new QLabel(this);
 		status_->setWordWrap(true);
 
@@ -95,8 +82,7 @@ public:
 		});
 
 		auto layout = new QVBoxLayout(this);
-		layout->addWidget(steps);
-		layout->addLayout(screenshots);
+		layout->addWidget(setup_steps(this));
 		layout->addWidget(status_);
 		layout->addWidget(manual, 0, Qt::AlignLeft);
 
@@ -248,9 +234,23 @@ public:
 		}
 		presets_->setToolTip(text("Camera.Preset.Tooltip"));
 
-		auto layout = new QVBoxLayout(this);
-		layout->addWidget(presets_);
-		layout->addStretch();
+		looks_ = new QComboBox(this);
+		for (const Look &look : all_looks()) {
+			const QString name = look.builtin ? text(("Look." + look.id).c_str())
+							  : QString::fromStdString(look.id);
+			looks_->addItem(name, QString::fromStdString(look.id));
+		}
+		looks_->setCurrentIndex(looks_->findData(QStringLiteral("natural")));
+		looks_->setToolTip(text("Dock.Look.Tooltip"));
+
+		set_up_ = new QCheckBox(text("Wizard.Picture.SetUp"), this);
+		set_up_->setChecked(true);
+		set_up_->setToolTip(text("Dock.SetUp.Tooltip"));
+
+		auto layout = new QFormLayout(this);
+		layout->addRow(text("Camera.Preset"), presets_);
+		layout->addRow(text("Camera.Look"), looks_);
+		layout->addRow(set_up_);
 		setFinalPage(true);
 	}
 
@@ -259,12 +259,16 @@ public:
 	bool validatePage() override
 	{
 		wizard_->choice.preset = presets_->currentData().toString().toStdString();
+		wizard_->choice.look = looks_->currentData().toString().toStdString();
+		wizard_->choice.set_up = set_up_->isChecked();
 		return true;
 	}
 
 private:
 	AddCameraWizard *wizard_;
 	QComboBox *presets_;
+	QComboBox *looks_;
+	QCheckBox *set_up_;
 };
 
 std::string unique_source_name(const char *base)
@@ -304,6 +308,8 @@ void AddCameraWizard::accept()
 		obs_data_set_string(settings, "phone_name", choice.phone_name.c_str());
 		obs_data_set_string(settings, "address", choice.address.c_str());
 		obs_data_set_string(settings, "preset", choice.preset.c_str());
+		obs_data_set_string(settings, "look", choice.look.c_str());
+		obs_data_set_bool(settings, "set_up_pending", choice.set_up);
 
 		const std::string name = unique_source_name(obs_module_text("Camera.Name"));
 		OBSSourceAutoRelease camera = obs_source_create(kCameraSourceId, name.c_str(), settings, nullptr);

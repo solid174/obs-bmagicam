@@ -72,14 +72,22 @@ target_sources(
     src/camera/background-work.hpp
     src/camera/camera-controls.cpp
     src/camera/camera-controls.hpp
+    src/camera/camera-routines.cpp
+    src/camera/camera-routines.hpp
     src/camera/camera-session.cpp
     src/camera/camera-session.hpp
+    src/camera/look-library.cpp
+    src/camera/look-library.hpp
+    src/camera/looks.cpp
+    src/camera/looks.hpp
     src/camera/network.cpp
     src/camera/network.hpp
     src/camera/stream-presets.cpp
     src/camera/stream-presets.hpp
     src/camera/streaming-xml.cpp
     src/camera/streaming-xml.hpp
+    src/camera/values.cpp
+    src/camera/values.hpp
     src/discovery/phone-browser.cpp
     src/discovery/phone-browser.hpp
     src/filter/beautify-filter.cpp
@@ -92,18 +100,45 @@ target_sources(
     src/phone/write-queue.hpp
     src/source/camera-source.cpp
     src/source/camera-source.hpp
+    src/source/histogram.cpp
+    src/source/histogram.hpp
     src/stream/ffmpeg-check.cpp
     src/stream/ffmpeg-check.hpp
     src/stream/media-clock.cpp
     src/stream/media-clock.hpp
     src/stream/stream-receiver.cpp
     src/stream/stream-receiver.hpp
+    src/sync/lag-estimate.cpp
+    src/sync/lag-estimate.hpp
+    src/sync/microphone-sync.cpp
+    src/sync/microphone-sync.hpp
     src/ui/add-camera-wizard.cpp
     src/ui/add-camera-wizard.hpp
+    src/ui/advanced-panel.cpp
+    src/ui/camera-link.cpp
+    src/ui/camera-link.hpp
     src/ui/controls-dock.cpp
     src/ui/controls-dock.hpp
+    src/ui/dock-kit.cpp
+    src/ui/dock-kit.hpp
     src/ui/frontend.cpp
     src/ui/frontend.hpp
+    src/ui/microphone-row.cpp
+    src/ui/microphone-row.hpp
+    src/ui/panels.hpp
+    src/ui/setup-guide.cpp
+    src/ui/setup-guide.hpp
+    src/ui/simple-panel.cpp
+    src/ui/widgets/buttons.cpp
+    src/ui/widgets/buttons.hpp
+    src/ui/widgets/flow-layout.cpp
+    src/ui/widgets/flow-layout.hpp
+    src/ui/widgets/histogram.cpp
+    src/ui/widgets/histogram.hpp
+    src/ui/widgets/ruler.cpp
+    src/ui/widgets/ruler.hpp
+    src/ui/widgets/segmented.cpp
+    src/ui/widgets/segmented.hpp
 )
 
 # Each system has its own DNS-SD service for finding phones
