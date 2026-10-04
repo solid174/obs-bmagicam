@@ -9,54 +9,53 @@ iPhone · Blackmagic Camera                      OBS · obs-bmagicam
                                                 
  Bonjour _http._tcp ─────────────────────────►  Discovery ───────────────┐
                                                                          ▼
- HTTPS :4444  REST   ◄── writes (coalesced) ──  CameraClient ──►  CameraState ──►  Camera Controls dock
- WSS   :4444  events ─── changes ────────────►       ▲                 │      └──►  Remote Control server ──► web panel, API
-                                                     │                 │
-                                                CameraSession ◄────────┘  (one per iPhone Camera source)
+ HTTPS :4444  REST   ◄── writes (coalesced) ──  CameraControls ──►  Camera Controls dock
+ WSS   :4444  events ─── changes ────────────►       │       (1.1: └──►  Remote Control server ──► web panel, API)
                                                      │
- SRT caller ── MPEG-TS (HEVC/H.264 + AAC) ─────►  StreamReceiver (FFmpeg) ──►  iPhone Camera source ──►  Beautify ──►  scene
+                                                CameraSession  (one of each per iPhone Camera source)
+                                                     │
+ SRT caller ── MPEG-TS (HEVC/H.264 + AAC) ─────►  StreamReceiver (FFmpeg) ──►  iPhone Camera source ──►  scene
 ```
 
 - The phone is controlled through its REST API and reports every change over a WebSocket ([camera-api.md](camera-api.md)).
 - Video and audio arrive as the phone's own livestream: the plugin adds a livestream destination that points at the PC, and the phone streams to it over SRT.
-- One `CameraSession` per iPhone Camera source owns its phone connection, its stream and its receiver.
-- `CameraState` holds what the phone can do and its current values. The dock, the web panel and the API all read it, and all write through the same `CameraClient`.
+- One `CameraSession` per iPhone Camera source owns its stream: it sets the phone up, receives the stream and puts the phone back.
+- One `CameraControls` per source owns the control connection: it follows the phone's settings, the ranges and lists they depend on, and writes changes. The dock reads and writes through it, and so will the web panel and the API in 1.1.
 
 ## OBS integration
 
 | Component | OBS object | ID |
 | --- | --- | --- |
 | iPhone Camera | Source: async video, audio, interaction (`OBS_SOURCE_ASYNC_VIDEO`, `OBS_SOURCE_AUDIO`, `OBS_SOURCE_INTERACTION`, `OBS_SOURCE_DO_NOT_DUPLICATE`) | `bmagicam_camera` |
-| Beautify | Video filter | `bmagicam_beautify` |
+| Beautify (1.1) | Video filter | `bmagicam_beautify` |
 | Camera Controls | Dock, `obs_frontend_add_dock_by_id` | `bmagicam_controls` |
 | Add iPhone Camera | Tools menu action opening a `QWizard`, `obs_frontend_add_tools_menu_qaction` | — |
-| Remote Control | Tools menu action opening a dialog | — |
+| Remote Control (1.1) | Tools menu action opening a dialog | — |
 
-The iPhone Camera source outputs timestamped video frames and audio, so OBS keeps them in sync ([Audio and video sync](#audio-and-video-sync)). The Interact window's clicks become tap-to-focus (CTL-5): `mouse_click` maps the position to 0–1 and calls `PUT /lens/focus/doAutoFocus`.
+The iPhone Camera source outputs timestamped video frames and audio, so OBS keeps them in sync ([Audio and video sync](#audio-and-video-sync)). The Interact window's clicks become tap-to-focus (CTL-5): `mouse_click` maps the position to 0–1 and calls `PUT /lens/focus/doAutoFocus`. The source also computes a histogram from every fourth frame, only while the dock shows it.
 
 ## Source tree
 
 ```
 src/
   plugin-main.cpp        module load and unload, registration, FFmpeg version check
-  discovery/             DNS-SD browsing: dnssd-macos.cpp, dnssd-windows.cpp, dnssd-avahi.cpp
-  phone/                 CameraClient: REST and WebSocket, write coalescing, retries
-  camera/                CameraSession, CameraState, control descriptors, snapshots
+  discovery/             DNS-SD browsing: browser-macos.cpp, browser-windows.cpp, browser-avahi.cpp
+  phone/                 CameraClient (REST), EventSocket (WebSocket), WriteQueue (coalescing, retries)
+  camera/                CameraSession, CameraControls, looks, Set up for streaming and resets, snapshots
   stream/                StreamReceiver: SRT listener, demux, decode, timestamps
-  source/                iPhone Camera obs_source_info and properties
-  looks/                 built-in and user looks, Set up for streaming
-  filter/                Beautify obs_source_info
-  remote/                HTTP server, WebSocket events, auth, static panel
-  ui/                    Camera Controls dock, wizard, Remote Control dialog, widgets
+  source/                iPhone Camera obs_source_info, properties, histogram
+  sync/                  microphone sync: capture and the GCC-PHAT lag estimate
+  ui/                    Camera Controls dock and its panels, painted controls in widgets/, wizard, setup guide
 data/
   locale/                en-US.ini, ru-RU.ini
-  effects/               Beautify .effect files
   looks/builtin.json     built-in looks
-  panel/                 web panel: index.html, app.js, app.css
   images/setup/          phone screenshots for the wizard
+  THIRD-PARTY-NOTICES.txt
 ```
 
-Modules depend downward only: `ui` and `remote` use `camera`; `camera` uses `phone`, `stream` and `discovery`. Nothing below `ui` uses Qt widgets, and nothing below `camera` knows about OBS sources.
+Version 1.1 adds `filter/` and `data/effects/` for Beautify, and `remote/` and `data/panel/` for Remote Control.
+
+Modules depend downward only: `ui` uses `source`, `camera` and `sync`; `camera` uses `phone`, `stream` and `discovery`. Nothing below `ui` uses Qt widgets, and nothing below `camera` knows about OBS sources.
 
 ## Camera session
 
@@ -107,11 +106,13 @@ So a scene collection always reproduces its stream format and its look, while li
 - **Echo handling.** While the user is changing a property, and for 300 ms after the last change, WebSocket events for that property do not move the control. Afterwards the control shows the value the phone confirmed.
 - **Ordering.** Writes that depend on each other are sent in order: auto exposure off before ISO or shutter; video format before shutter; lens before zoom.
 - **Errors.** 403 shows the lock reason (CTL-4). 404 or 501 at connect time hides the control (CTL-1). 400 reverts the control. Network errors retry with backoff, including during the pause after a format change.
-- **Subscriptions.** On connect the client subscribes to every property in the control descriptors, plus livestream status, access status, power and storage. The subscribe response fills `CameraState` in one round trip. The WebSocket reconnects on its own.
+- **Subscriptions.** On connect `CameraControls` subscribes to every property the dock shows, plus livestream status, access status, power and storage, and to the ranges and lists in case the phone reports them. The subscribe response fills its values in one round trip; what the phone does not report over the WebSocket is read once, and again after a write or when what it depends on changes (the frame rate, the lens, an audio input). The WebSocket names the phone screen's properties after its LCD (`/monitoring/LCD/...`), the REST API after `Device`. The WebSocket reconnects on its own.
 
-### Control descriptors
+### How the dock binds to the phone
 
-One table in `camera/` describes every control: ID, group, phone endpoint and JSON field, value type (number, discrete list, enum, toggle, action), where its range comes from (a `description` or `supported…` endpoint), unit and display format, lock rules, whether it changes the stream (CTL-7), whether it appears in Simple mode (UI-4), the locale keys of its label and tooltip (UI-5), and its factory default. The dock builds its rows from this table, the API exposes it at `GET /api/v1/controls`, and the web panel renders from that. One list keeps the three surfaces identical. The full list is in [ui.md](ui.md#control-map).
+`CameraControls` keeps the phone's last known value of every property the dock shows, as the phone sends it, and tells listeners which ones changed; the dock gathers them per pass of Qt's event loop, so a burst of events updates it once. Each row of the dock binds to its property directly and reads its range or list from the phone (`description` and `supported…` endpoints), so a control appears only where the phone answers for it (CTL-1). A change shows in `CameraControls` at once and goes out through the write queue; when the phone refuses it, the phone's value comes back. The full list of controls is in [ui.md](ui.md#control-map).
+
+In 1.1 the web panel and the API need the same controls, and a table of control descriptors (ID, phone endpoint and field, value type, range source, unit, lock rules, stream impact, Simple or Advanced, locale keys, factory default) replaces the dock's direct bindings, so one list keeps the three surfaces identical.
 
 ## Video path
 
@@ -182,7 +183,7 @@ A look is a set of color correction values: lift, gamma, gain and offset per cha
 
 - Built-in looks live in `data/looks/builtin.json`. User looks live in the module config folder as `looks.json` (LOOK-4).
 - Applying a look writes the seven `/colorCorrection/*` properties, each through the coalescer.
-- Saving a look stores the current `CameraState` color values under a name.
+- Saving a look stores the phone's current color values under a name.
 - The source keeps its look values in the scene collection (see the [ownership table](#what-the-plugin-owns-and-what-the-phone-owns)).
 
 Starting values for the built-in looks. They are tuned on the phone in development against a color chart and real skin tones, on a waveform and a vectorscope, until LOOK-5 holds:
@@ -213,9 +214,9 @@ Each step goes through the same coalescer, and every value stays adjustable in t
 
 A microphone connected to the computer reaches OBS within a few milliseconds, while the iPhone's picture arrives about 0.4 s after the moment it shows ([Latency budget](#latency-budget)). The iPhone's own audio travels with its picture and stays in sync; a computer microphone runs ahead and has to be delayed (SYN-1).
 
-- **Capture.** `obs_source_add_audio_capture_callback` on the iPhone Camera source and on the chosen microphone delivers both with their OBS timestamps, before any Sync Offset: the iPhone's as the receiver mapped them, the microphone's as its source stamped them.
-- **Measure.** Both are mixed to mono and resampled to 8 kHz. Over an 8-second window, a cross-correlation with phase transform (GCC-PHAT), computed with FFmpeg's FFT (`av_tx` in libavutil, no new dependency), finds the lag at which the two match, searched within ±1.5 s. Speech and claps give a sharp peak even though the two microphones sound different.
-- **Trust.** The peak must stand well above the rest of the correlation, and two windows in a row must agree within 5 ms; otherwise the result is "could not measure" and nothing changes (SYN-3). The resolution is 0.125 ms.
+- **Capture.** `obs_source_add_audio_capture_callback` on the iPhone Camera source and on the chosen microphone delivers both with their own timestamps, before any Sync Offset: libobs hands the callbacks the source's data as it came, and applies the offset only to its own copy. The iPhone's timestamps are the receiver's mapping, the microphone's are its capture times. Muted sources are heard too, since the iPhone is usually muted in OBS when a computer microphone is used.
+- **Measure.** For 12 seconds both are mixed to mono and binned at 8 kHz by their timestamps on OBS's clock. Overlapping 4-second windows, 2 seconds apart, are each cross-correlated with phase transform (GCC-PHAT), computed with FFmpeg's FFT (`av_tx` in libavutil, no new dependency), which finds the lag at which the two match, searched within ±1.5 s. Speech and claps give a sharp peak even though the two microphones sound different; the resolution is 0.125 ms, refined between samples by a parabola through the peak.
+- **Trust.** A window counts when both sources are louder than about −60 dBFS and the peak is at least twice the next highest one. Two windows in a row must agree within 5 ms; otherwise the result is "could not measure", or silence when nothing was heard, and nothing changes (SYN-3).
 - **Apply.** `obs_source_set_sync_offset` on the microphone, to the measured lag. The lag is measured before any offset, so syncing again gives the same value instead of adding up. The previous offset is kept for Undo (SYN-2).
 
 ## Reset and restore
@@ -223,12 +224,12 @@ A microphone connected to the computer reaches OBS within a few milliseconds, wh
 - **Reset to camera defaults (RST-1):** `PUT /presets/active {"preset":"default"}`, then neutral color correction. If V-5 shows that `default` misses settings, the plugin applies a factory table for those settings, captured once from a fresh install of the app version it supports.
 - **Before snapshot:** the first time the plugin connects to a phone (a `device_id` it has never seen), before writing anything, it does two things:
   - saves the phone's state as a phone preset `Before obs-bmagicam` (`PUT /presets/{name}`), which the user can also load in the app without OBS;
-  - writes a JSON snapshot to `snapshots/<device_id>.json` in the module config folder: the active livestream destination, and every writable value from the control descriptors that V-6 shows a phone preset does not cover.
-- **Restore my settings (RST-2):** load the phone preset, write the remaining snapshot values, select the original livestream destination and delete the plugin's destination.
-- **Group reset (RST-3):** writes the descriptors' factory defaults for one group.
-- **Reliability (RST-4):** a reset is a list of writes. The plugin retries each write until the phone confirms the value, and keeps an unfinished reset in the config folder so it resumes after a crash or a lost connection.
+  - writes a JSON snapshot to `snapshots/<device_id>.json` in the module config folder: the active livestream destination, and every setting the dock can change, since what a phone preset covers is not known yet (V-6).
+- **Restore my settings (RST-2):** loads the phone preset, then writes the snapshot's values back in an order the phone accepts: video format, lens, auto exposure before ISO and shutter, the autofocus mode before the focus distance. Values the camera sets itself, such as ISO under auto exposure, are left to it. The livestream destination is the session's while the source exists, so it comes back, with the plugin's destination deleted, when the source is removed or OBS closes.
+- **Group reset (RST-3):** each tab of Advanced resets its group: neutral color, continuous autofocus on the center, the audio inputs' switches off, the phone screen's tools off.
+- **Reliability (RST-4):** a reset is a list of writes. The plugin tries each write again until the phone confirms it, up to five times a second apart while the phone does not answer, and reports a reset that did not complete so the user can run it again.
 
-## Beautify
+## Beautify (1.1)
 
 Beautify retouches skin and nothing else (BEA-8). It runs on the GPU as OBS `.effect` files, which OBS compiles for Direct3D 11, OpenGL and Metal.
 
@@ -266,7 +267,7 @@ Tests, after the reference's self-test idea: neutral settings are a bit-exact id
 
 The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera offers four modes: Off, Standard, Cinematic and Extreme (STB-2). They steady handheld shots very well, so the plugin adds no stabilization of its own (STB-3). The API has one switch for it, `/lens/opticalImageStabilization` with `enabled` and `controlAvailable` (whether it can be changed in the current format). Writing `false` sets the app to Off and `true` sets Standard; Cinematic and Extreme read as `true` and cannot be set or told apart (verified on the test phone, 2026-10-04). So the dock offers Off and On, and the stronger modes are chosen on the phone (STB-2). V-15 still measures how much each mode crops and whether a mode adds delay to the livestream.
 
-## Remote Control server
+## Remote Control server (1.1)
 
 - cpp-httplib server on its own thread pool. Off by default (WEB-1); default port 4466, next to obs-websocket's 4455.
 - **Access (WEB-4):**
@@ -274,20 +275,20 @@ The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera o
   - requires a password, which is generated on first use and changeable;
   - slows down repeated wrong passwords.
 - Serves the web panel from `data/panel/`, the REST API under `/api/v1`, and live changes over a WebSocket at `/api/v1/events`. See [remote-api.md](remote-api.md).
-- Handlers read `CameraState` snapshots and write through `CameraClient`, the same path as the dock. Beautify changes go through `obs_source_update` on the filter.
+- Handlers read and write through `CameraControls`, the same path as the dock. Beautify changes go through `obs_source_update` on the filter.
 - The dialog in the Tools menu shows the address, password and a QR code made with qrcodegen, the generator OBS uses for its own WebSocket QR code.
 
 ## Persistence
 
 | What | Where |
 | --- | --- |
-| Phone `device_id`, manual address, stream preset, look values, UDP port | iPhone Camera source settings (scene collection) |
-| Beautify settings | Filter settings (scene collection) |
-| Remote Control: on/off, port, password | `remote.json` in the module config folder |
-| User looks, user Beauty styles | `looks.json`, `beauty-styles.json` |
-| Before snapshots, unfinished resets | `snapshots/<device_id>.json` |
-| Known phones (name, last address) | `devices.json` |
+| Phone `device_id` or manual address, stream preset, look and color, connection settings | iPhone Camera source settings (scene collection) |
+| User looks | `looks.json` in the module config folder |
+| Before snapshots | `snapshots/<phone>.json` |
+| The phone's own livestream destination and video format while a source uses the phone | `destinations.json` |
 | Simple or Advanced mode | `ui.json` |
+| Beautify settings (1.1) | Filter settings (scene collection) |
+| Remote Control: on/off, port, password (1.1) | `remote.json` |
 
 ## Platform notes
 
@@ -306,7 +307,7 @@ The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera o
 | FFmpeg (avformat, avcodec, avutil, swresample) | SRT input, demux, decode, audio drift compensation | obs-deps | Distribution | LGPL-2.1-or-later |
 | Mbed TLS | TLS to the phone | obs-deps | Distribution | Apache-2.0 or GPL-2.0-or-later |
 | nlohmann/json | JSON | obs-deps | Distribution | MIT |
-| qrcodegen | Connect QR code | obs-deps | Distribution | MIT |
+| qrcodegen (1.1) | Connect QR code | obs-deps | Distribution | MIT |
 | cpp-httplib | HTTPS and WebSocket client, HTTP and WebSocket server | Fetched at a pinned release | Same | MIT |
 | DNS-SD | Discovery | System | Avahi client | System, LGPL-2.1 |
 
@@ -368,7 +369,7 @@ Each milestone leaves a working plugin on all three platforms.
 | --- | --- | --- |
 | M0 Skeleton | Plugin from obs-plugintemplate; empty source, filter, dock and Tools entries; locale files; CI builds and packages for Windows, macOS and Linux | The packages install and load in OBS on all three |
 | M1 Camera | Discovery, CameraClient, stream setup, receiver with hardware decoding, session states, reconnect, stop when hidden, minimal wizard | 1080p60 for 30 min without drops on all three; lip sync within NFR-6 at the start and after two hours; V-1 to V-4, V-7, V-8, V-11, V-12 and V-14 to V-18 answered |
-| M2 Controls | Control descriptors with tooltips, the dock in Simple and Advanced modes, two-way sync, locks, tap-to-focus, Set up for streaming, looks, resets, phone stabilization, microphone sync | Every control in [ui.md](ui.md#control-map) works on the test phone; UI-4, UI-5 and UI-6 hold; looks tuned until LOOK-5 holds |
-| M3 Beautify | Beautify with styles, the Beauty slider, advanced sliders and show mask | BEA-1 to BEA-8 and NFR-1 met on the listed hardware |
-| M4 Remote Control | Server, API, web panel, Tools dialog | WEB-1 to WEB-5; the panel controls everything the dock does |
-| M5 Release | Full wizard with screenshots, Russian, theme pass, signing and notarization, documentation | The release checklist in [releasing.md](releasing.md) passes |
+| M2 Controls | The dock in Simple and Advanced modes with tooltips, two-way sync, locks, tap-to-focus, Set up for streaming, looks, resets, phone stabilization, microphone sync | Every control in [ui.md](ui.md#control-map) works on the test phone; UI-4, UI-5 and UI-6 hold; looks tuned until LOOK-5 holds |
+| M5 Release 1.0 | Wizard with screenshots, Russian, theme pass, Windows installer, license notices, documentation, signing and notarization where the Apple Developer membership allows | The release checklist in [releasing.md](releasing.md) passes |
+| M3 Beautify (1.1) | Beautify with styles, the Beauty slider, advanced sliders and show mask | BEA-1 to BEA-8 and NFR-1 met on the listed hardware |
+| M4 Remote Control (1.1) | Control descriptors, server, API, web panel, Tools dialog | WEB-1 to WEB-5; the panel controls everything the dock does |

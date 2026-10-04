@@ -92,8 +92,6 @@ target_sources(
     src/camera/values.hpp
     src/discovery/phone-browser.cpp
     src/discovery/phone-browser.hpp
-    src/filter/beautify-filter.cpp
-    src/filter/beautify-filter.hpp
     src/phone/camera-client.cpp
     src/phone/camera-client.hpp
     src/phone/event-socket.cpp

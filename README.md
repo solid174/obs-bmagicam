@@ -2,7 +2,7 @@
 
 An OBS Studio plugin that turns an iPhone running the free Blackmagic Camera app into a 60 fps camera on your local network, with every camera setting in an OBS dock.
 
-> **Status:** in development ([milestones](docs/architecture.md#milestones)). M0, the skeleton, is done. M1, the camera, works: Tools → Add iPhone Camera finds the phone, and the iPhone Camera source sets up its livestream, receives it with hardware decoding at about 400 ms glass to glass, reconnects by itself and gives the phone back its settings when removed. The Camera Controls dock, Beautify and Remote Control are next. The documentation below describes version 1.0, and there is no release yet.
+> **Status:** version 1.0 is in its release test ([milestones](docs/architecture.md#milestones)). Tools → Add iPhone Camera finds the phone, and the iPhone Camera source sets up its livestream and receives it with hardware decoding at about 400 ms glass to glass, reconnects by itself and gives the phone back its settings when removed. The Camera Controls dock has every camera setting, looks, Set up for streaming, resets and microphone sync. Beautify and Remote Control follow in 1.1.
 
 Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name the app the plugin works with.
 
@@ -12,9 +12,9 @@ Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name 
 - **Every camera setting in OBS.** Exposure, white balance, focus, lens and zoom, color, format, the phone's monitoring tools and audio, in a dock that looks like part of OBS. Changes show in the preview while you drag.
 - **A professional picture in one click.** "Set up for streaming" prepares the camera the way a camera operator would, and looks from Natural to Vivid give the picture its style.
 - **Stabilization** from the phone itself, Standard, Cinematic or Extreme, for handheld shots.
-- **Beautify**, a skin smoothing filter for any video source.
+- **Microphone in sync.** A microphone on your computer runs ahead of the iPhone's picture; one click measures the delay from your voice and sets it.
 - **Safe to try.** Reset the camera to its defaults, or restore exactly the settings your phone had before.
-- **Remote Control** (optional): a web panel for a phone or tablet, and an API for Stream Deck, Companion and scripts.
+- **Coming in 1.1:** Beautify, a skin smoothing filter for any video source, and Remote Control, a web panel for a phone or tablet with an API for Stream Deck, Companion and scripts.
 - Windows, macOS and Linux. English and Russian.
 
 ## Requirements
@@ -28,12 +28,13 @@ Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name 
 | Document | For |
 | --- | --- |
 | [Setup](docs/setup.md) | Installing the plugin, preparing the phone, first connection, troubleshooting |
-| [Requirements](docs/requirements.md) | What 1.0 must do |
+| [Requirements](docs/requirements.md) | What 1.0 and 1.1 must do |
 | [User interface](docs/ui.md) | The dock, every control, properties, wizard, web panel |
 | [Architecture](docs/architecture.md) | How it is built, decisions, open questions, milestones |
 | [Blackmagic Camera API](docs/camera-api.md) | The phone's API as verified on a real iPhone, with stream and latency measurements |
-| [Remote Control API](docs/remote-api.md) | The plugin's own HTTP and WebSocket API |
+| [Remote Control API](docs/remote-api.md) | The plugin's own HTTP and WebSocket API, planned for 1.1 |
 | [Building and releasing](docs/releasing.md) | Builds for all three systems, CI, packaging, release test |
+| [Changelog](CHANGELOG.md) | What changed in each release |
 
 ## License
 

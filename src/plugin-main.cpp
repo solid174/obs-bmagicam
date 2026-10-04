@@ -6,7 +6,6 @@
 
 #include "camera/background-work.hpp"
 #include "discovery/phone-browser.hpp"
-#include "filter/beautify-filter.hpp"
 #include "source/camera-source.hpp"
 #include "stream/ffmpeg-check.hpp"
 #include "ui/frontend.hpp"
@@ -31,7 +30,6 @@ bool obs_module_load(void)
 	bmagicam::ffmpeg_usable();
 
 	bmagicam::register_camera_source();
-	bmagicam::register_beautify_filter();
 	bmagicam::ui::load();
 
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);

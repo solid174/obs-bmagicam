@@ -53,6 +53,7 @@ function Package {
         ErrorAction = 'SilentlyContinue'
         Path = @(
             "${ProjectRoot}/release/${ProductName}-*-windows-*.zip"
+            "${ProjectRoot}/release/${ProductName}-*-windows-*.exe"
         )
     }
 
@@ -66,6 +67,22 @@ function Package {
         Verbose = ($Env:CI -ne $null)
     }
     Compress-Archive -Force @CompressArgs
+    Log-Group
+
+    Log-Group "Building the ${ProductName} installer..."
+    $InnoSetup = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+    $InstallerArgs = @(
+        '/Q'
+        "/DVersion=${ProductVersion}"
+        "/DSource=${ProjectRoot}\release\${Configuration}"
+        "/DOutputDir=${ProjectRoot}\release"
+        "/DOutputName=${OutputName}"
+        "${ProjectRoot}\cmake\windows\resources\installer.iss"
+    )
+    & $InnoSetup @InstallerArgs
+    if ( $LASTEXITCODE -ne 0 ) {
+        throw "Inno Setup failed with exit code ${LASTEXITCODE}"
+    }
     Log-Group
 }
 

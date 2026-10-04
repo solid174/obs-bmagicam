@@ -3,6 +3,7 @@
 
 #include "add-camera-wizard.hpp"
 
+#include "controls-dock.hpp"
 #include "frontend.hpp"
 #include "setup-guide.hpp"
 #include "../camera/look-library.hpp"
@@ -302,6 +303,7 @@ void AddCameraWizard::accept()
 						    ? obs_frontend_get_current_preview_scene()
 						    : obs_frontend_get_current_scene();
 	obs_scene_t *scene = obs_scene_from_source(scene_source);
+	OBSWeakSource added;
 	if (scene) {
 		OBSDataAutoRelease settings = obs_data_create();
 		obs_data_set_string(settings, "phone", choice.phone_id.empty() ? "manual" : choice.phone_id.c_str());
@@ -314,6 +316,7 @@ void AddCameraWizard::accept()
 		const std::string name = unique_source_name(obs_module_text("Camera.Name"));
 		OBSSourceAutoRelease camera = obs_source_create(kCameraSourceId, name.c_str(), settings, nullptr);
 		obs_sceneitem_t *item = obs_scene_add(scene, camera);
+		added = OBSGetWeakRef(camera);
 
 		// Fitted to the canvas
 		obs_video_info video = {};
@@ -326,12 +329,16 @@ void AddCameraWizard::accept()
 		}
 	}
 
+	// The Camera Controls dock shows the new camera
 	if (auto main_window = static_cast<QMainWindow *>(obs_frontend_get_main_window())) {
 		if (auto dock = main_window->findChild<QDockWidget *>(kControlsDockId)) {
 			dock->show();
 			dock->raise();
 		}
 	}
+	OBSSourceAutoRelease camera = obs_weak_source_get_source(added);
+	if (ControlsDock *controls = ControlsDock::instance(); controls && camera)
+		controls->show_source(camera);
 	QWizard::accept();
 }
 

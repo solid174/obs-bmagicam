@@ -1,6 +1,6 @@
 # Requirements
 
-obs-bmagicam is an open-source OBS Studio plugin. It turns an iPhone running the Blackmagic Camera app into a 60 fps camera on the local network, puts every camera setting of the app into an OBS dock where each change shows in the preview at once, offers one-click looks and stabilization, and adds a skin beautifier with a one-slider Beauty control. Setup takes one click: pick the phone, pick a preset, and the camera appears on the scene with the beautifier on.
+obs-bmagicam is an open-source OBS Studio plugin. It turns an iPhone running the Blackmagic Camera app into a 60 fps camera on the local network, puts every camera setting of the app into an OBS dock where each change shows in the preview at once, offers one-click looks and stabilization, and keeps a computer microphone in sync with the iPhone's picture. Setup takes one click: pick the phone, pick a preset and a look, and the camera appears on the scene, set up for streaming. Version 1.1 adds a skin beautifier with a one-slider Beauty control and a Remote Control web panel ([Releases](#releases)).
 
 Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name the app the plugin works with.
 
@@ -10,9 +10,9 @@ Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name 
 | --- | --- | --- |
 | iPhone Camera | Source | Finds the phone, configures it and receives its video and audio |
 | Camera Controls | Dock | Every camera setting of the phone, looks and resets, changed live |
-| Beautify | Filter | Smooths skin on any video source, not only the iPhone Camera |
-| Add iPhone Camera | Tools menu action | Adds the source to the current scene with Beautify, a stream preset and a look |
-| Remote Control | Tools menu dialog and local web server | Optional web panel and API for phones, tablets, Stream Deck and scripts |
+| Add iPhone Camera | Tools menu action | Adds the source to the current scene with a stream preset and a look |
+| Beautify (1.1) | Filter | Smooths skin on any video source, not only the iPhone Camera |
+| Remote Control (1.1) | Tools menu dialog and local web server | Optional web panel and API for phones, tablets, Stream Deck and scripts |
 
 All components ship in one plugin. Source and filter do not depend on each other.
 
@@ -67,7 +67,7 @@ All components ship in one plugin. Source and filter do not depend on each other
 - **RST-3** Every group of controls has its own reset to default.
 - **RST-4** Both resets ask for confirmation first, and keep retrying until the phone confirms every value, so a dropped connection cannot leave the phone half-changed.
 
-## Beautify
+## Beautify (1.1)
 
 - **BEA-1** Works on any video source.
 - **BEA-2** One Beauty slider with a magic-wand icon, like TikTok's, sets everything at once. Advanced sliders: smoothing, texture, tone evening (blemishes and redness), sharpening of what is not skin, glow, mask softness. Each change shows in the preview immediately.
@@ -80,7 +80,7 @@ All components ship in one plugin. Source and filter do not depend on each other
 
 ## Add iPhone Camera
 
-- **ONE-1** One action from the Tools menu: choose a phone, a stream preset, a look and a Beauty style. The plugin adds the source to the current scene fitted to the canvas, attaches Beautify with that style, and starts the camera.
+- **ONE-1** One action from the Tools menu: choose a phone, a stream preset and a look, and whether to set the camera up for streaming. The plugin adds the source to the current scene fitted to the canvas and starts the camera. From 1.1 it also offers a Beauty style and attaches Beautify with it.
 - **ONE-2** Every setting it applies can be changed afterwards in the usual OBS properties.
 
 ## Setup
@@ -89,7 +89,7 @@ All components ship in one plugin. Source and filter do not depend on each other
 - **SET-2** The wizard's first page waits for a phone and moves on by itself as soon as one appears, so the user can follow the steps with OBS open.
 - **SET-3** On the computer the only prompts are the operating system's own (macOS Local Network, Windows Firewall), and the guide says what to choose in each.
 
-## Remote Control
+## Remote Control (1.1)
 
 - **WEB-1** Off by default. When turned on, OBS serves a control panel and an API on the local network.
 - **WEB-2** The panel works in the browser of a phone or tablet. It has the same controls as the Camera Controls dock, the looks and the Beautify sliders, and updates live.
@@ -102,7 +102,7 @@ All components ship in one plugin. Source and filter do not depend on each other
 - **UI-1** Looks like part of OBS in every built-in theme (Default, Classic, Acri, Grey, Light, Rachni and System) and follows a theme change without a restart.
 - **UI-2** Uses OBS's own building blocks: a dock, source properties, Tools menu entries and a wizard. No colors, fonts or window styles of its own: controls the plugin draws itself take every color and its font from the current theme.
 - **UI-3** Scrolling through the dock never changes a setting. Sliders respond to the mouse wheel only when focused, as in OBS's own properties.
-- **UI-4** Simple and Advanced modes. Simple, the default, is never crowded: eight rows on one page (Set up for streaming, look, Beauty, brightness, warmth, lens, focus, stabilization), plus a microphone row when the scene has a microphone of the computer's (SYN-1), in everyday words instead of camera terms, and a status line only when something needs attention. Advanced shows every control. The dock, the web panel and the Beautify properties all have both modes.
+- **UI-4** Simple and Advanced modes. Simple, the default, is never crowded: seven rows on one page (Set up for streaming, look, brightness, warmth, lens, focus, stabilization; Beauty joins them in 1.1), plus a microphone row when OBS has a microphone of the computer's (SYN-1), in everyday words instead of camera terms, and a status line only when something needs attention. Advanced shows every control. The dock has both modes, and so will the web panel and the Beautify properties.
 - **UI-5** Every control explains itself: a tooltip says in plain words what it does, what it changes in the picture and when to use it. In the web panel the same text opens with an ⓘ button, because touch screens have no hover.
 - **UI-6** Controls are visual and direct, in the spirit of Blackmagic Camera: values large enough to read at a glance, changed by dragging rulers and clicking tiles and buttons rather than by typing, with short animations that show what changed. A text box appears only where something has to be typed.
 
@@ -114,8 +114,8 @@ Each stage runs only while it is in use, and the hardware it needs adds up only 
 | --- | --- | --- |
 | iPhone Camera | Video decoding | Any PC that runs OBS. No dedicated GPU; hardware decoding is used when available |
 | iPhone Camera at 4K | 4K HEVC decoding | Hardware HEVC decoding: most GPUs since 2016, Apple M1 class |
-| Beautify | Skin smoothing on the GPU | Integrated GPU, Intel Iris Xe or Apple M1 class |
-| Beautify on selected faces (1.1) | Face detection and recognition | Dedicated GPU, GTX 1660 class, or Apple M1 class |
+| Beautify (1.1) | Skin smoothing on the GPU | Integrated GPU, Intel Iris Xe or Apple M1 class |
+| Beautify on selected faces (1.2) | Face detection and recognition | Dedicated GPU, GTX 1660 class, or Apple M1 class |
 
 - **PWR-1** A stage that is off costs nothing: a hidden or disabled filter runs no GPU passes, and face detection loads no models until a mode needs it.
 - **PWR-2** Turning a stage on or off takes effect immediately, without restarting OBS or the camera.
@@ -139,15 +139,19 @@ Each stage runs only while it is in use, and the hardware it needs adds up only 
 
 ### 1.0
 
-iPhone Camera, Camera Controls with looks, stabilization and resets, Beautify, Add iPhone Camera and Remote Control as described above.
+iPhone Camera, Camera Controls with looks, stabilization, resets and microphone sync, and Add iPhone Camera, as described above.
 
-### 1.1: Face detection for Beautify
+### 1.1: Beautify and Remote Control
+
+Beautify (BEA-1 to BEA-8) and Remote Control (WEB-1 to WEB-5) as described above, the Beauty row in the dock, and the Beauty style in Add iPhone Camera.
+
+### 1.2: Face detection for Beautify
 
 The user chooses who Beautify applies to. Face detection runs only in Selected mode:
 
 | Mode | Behavior | Face detection |
 | --- | --- | --- |
-| All | Everyone in the frame is beautified, as in 1.0 | Off |
+| All | Everyone in the frame is beautified, as in 1.1 | Off |
 | Selected | Only the chosen participants are beautified | On |
 | Off | Nobody is beautified | Off |
 

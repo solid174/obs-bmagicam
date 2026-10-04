@@ -55,9 +55,9 @@ The template's workflows stay as they are:
 Added for this project:
 
 - **Load test** (`load-test.yaml`) after every push build: on each platform it installs the package the way a user would (the `.deb`, the `.pkg` into the home folder, the `.zip` into ProgramData), starts the released OBS 32.2 with a fresh configuration, waits for "Startup complete" and checks OBS's log for the plugin's load message. GitHub's runners have no GPU, so OBS renders in software (Microsoft Basic Render Driver, Apple Software Renderer, Mesa llvmpipe), which is enough to load modules. A release is only drafted when the load test passes.
-- **Unit tests** with CTest on all three runners, for the parts that need no phone and no OBS: Streaming XML generation, phone JSON mapping, the write coalescer, control descriptors, timestamp mapping, look files.
-- **Windows installer** built after the `.zip`.
-- **License notices** collected into every package (LIC-3).
+- **Unit tests** with CTest on all three runners, for the parts that need no phone and no OBS: Streaming XML generation and matching, the write queue, timestamp mapping, looks and look files, and the microphone sync's lag estimate.
+- **Windows installer** built after the `.zip` from `cmake/windows/resources/installer.iss`.
+- **License notices** in `data/THIRD-PARTY-NOTICES.txt`, which every package installs with the plugin's data (LIC-3).
 - **Ubuntu SRT check**, as above.
 
 macOS signing and notarization use the template's repository secrets:
@@ -96,12 +96,12 @@ Run on the release candidate packages, installed from the draft release on clean
 | Hide and show | Stream stops 2 s after hiding and resumes on show (CAM-7) | One |
 | Controls | Every row of the [control map](ui.md#control-map) changes the phone and the preview; changes on the phone appear in OBS (CTL-1 to CTL-3) | One, spot checks on the others |
 | Looks | LOOK-5 on a color chart and real skin, checked on waveform and vectorscope | One |
-| Resets | RST-1 to RST-4, including Wi-Fi pulled in the middle of a reset | One |
-| Beautify | BEA-1 to BEA-8, GPU time within NFR-1 | Windows on Iris Xe, macOS on M1 |
+| Resets | RST-1 to RST-4, including Wi-Fi pulled in the middle of a reset; after removing the source the phone has its own destination and video format again | One |
+| Beautify (1.1) | BEA-1 to BEA-8, GPU time within NFR-1 | Windows on Iris Xe, macOS on M1 |
 | Stabilization | Off and On in the dock switch the app between Off and Standard; Cinematic and Extreme chosen on the phone show as On; each mode reaches the stream and matches the app's own picture (STB-1, STB-2) | One |
 | Simple mode | Someone who has never used the plugin installs it, connects a phone and gets a good picture with Simple mode and the tooltips only, without help (UI-4, UI-5) | One |
-| Remote Control | Panel in Safari on iPhone and Chrome on Android; API examples; password lockout; outside address refused | All three |
-| Themes | Dock, properties, wizard and dialog in every built-in theme; switch theme while they are open (UI-1) | All three |
+| Remote Control (1.1) | Panel in Safari on iPhone and Chrome on Android; API examples; password lockout; outside address refused | All three |
+| Themes | Dock, properties, wizard and setup guide in every built-in theme; switch theme while they are open (UI-1) | All three |
 | Languages | English and Russian, no clipped text (NFR-5) | One |
 | Several phones | Two phones live at once (CAM-8) | One |
 

@@ -498,6 +498,18 @@ QWidget *AdvancedPanel::lens_adjuster()
 	zoom_row->set_control(zoom);
 	layout->addWidget(zoom_row);
 
+	// Automatic lens switching, on phones that have it
+	auto automatic = new Chip(text("Dock.Lens.Auto"), page);
+	automatic->setToolTip(text("Dock.Lens.Auto.Tooltip"));
+	layout->addWidget(automatic, 0, Qt::AlignLeft);
+	connect(automatic, &QAbstractButton::clicked, this,
+		[this](bool on) { context_.controls->set("/lens/cameras/auto", {{"enabled", on}}); });
+	watches_.add({"/lens/cameras/auto"}, [this, automatic] {
+		const nlohmann::json value = context_.controls->get("/lens/cameras/auto");
+		automatic->setVisible(bool_at(value, "supported"));
+		automatic->setChecked(bool_at(value, "enabled"));
+	});
+
 	auto choices = std::make_shared<std::vector<LensChoice>>();
 	lenses->activated = [this, choices](int index) {
 		if (index >= 0 && index < static_cast<int>(choices->size()))

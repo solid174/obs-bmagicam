@@ -55,8 +55,8 @@ The first time OBS talks to the phone, your computer may ask for permission:
 
 1. In OBS: **Tools → Add iPhone Camera…**
 2. The first page repeats the phone steps and waits for your phone. As soon as it appears, the wizard moves on.
-3. Choose the stream preset (1080p60 High is right for most streams; the 4K presets look sharper but add delay and need strong 5 GHz Wi-Fi), a look, and a Beauty style with its strength. Leave **Set up the camera for streaming** on. Hover over any choice to see what it does.
-4. The wizard saves your phone's current settings first, so you can always get them back, then starts the camera. **Finish** adds it to the current scene, fitted to the canvas.
+3. Choose the stream preset (1080p60 High is right for most streams; the 4K presets look sharper but add delay and need strong 5 GHz Wi-Fi) and a look. Leave **Set up the camera for streaming** on. Hover over any choice to see what it does.
+4. **Add Camera** adds it to the current scene, fitted to the canvas, and opens the Camera Controls dock with it. The first time it meets your phone, the plugin saves the phone's current settings, so you can always get them back. The picture appears within a few seconds.
 
 ## 5. Adjust the picture
 
@@ -64,20 +64,25 @@ The first time OBS talks to the phone, your computer may ask for permission:
 - **Set up for streaming** (the button at the top of the dock) sets a flicker-free shutter, measures exposure and white balance once and holds them, and turns on continuous focus. Run it again if the light changes.
 - **Look** gives the picture its style: Natural, Studio, Warm, Vivid, Soft or Cinematic. Adjust it in the Color tab, then **+** to save it as your own.
 - **Focus on a spot:** right-click the source → **Interact**, then click where you want sharpness.
-- **Beauty** (the wand row) smooths skin with one slider. To fine-tune it: right-click the source → Filters → Beautify → Advanced settings.
-- **Advanced** (check box at the top of the dock) shows every camera setting. Hover over any control to see what it does.
+- **Advanced** (check box at the top of the dock) shows every camera setting: the histogram, the camera's ISO, shutter, white balance and lens, color, focus, the phone's audio and its own screen. Hover over any control to see what it does.
+- **Phone presets** (⋮ menu) saves the camera's settings on the phone under a name and loads them again.
 
-## 6. Control from a phone or tablet (optional)
+## 6. Sync a computer microphone
 
-1. **Tools → iPhone Camera Remote Control…** → Enable Remote Control.
-2. **Show Connect Info** → scan the QR code with the tablet. The panel opens signed in.
+A microphone connected to the computer hears you about half a second before the iPhone's picture shows you. The iPhone's own audio is always in sync; if you use a computer microphone instead:
+
+1. In the dock's **Microphone** row, choose the microphone.
+2. Click **Sync** and talk or clap for about 12 seconds, with the iPhone's microphone on in Blackmagic Camera. It may be muted in OBS.
+3. The button shows the delay it set, for example **Synced · 412 ms**, as the microphone's Sync Offset (Advanced Audio Properties). **Undo** puts the previous value back.
+
+If it says it could not measure, nothing changed: talk or clap closer to both microphones and try again.
 
 ## 7. Reset
 
 In the Camera Controls menu (⋮):
 
 - **Reset to camera defaults** returns every camera setting to how a fresh install of Blackmagic Camera has it.
-- **Restore my settings** returns the phone to exactly how it was before obs-bmagicam first touched it, including its livestream destination. The same settings are also saved on the phone as the preset "Before obs-bmagicam".
+- **Restore my settings** returns the phone's settings to exactly how they were before obs-bmagicam first touched them. The same settings are also saved on the phone as the preset "Before obs-bmagicam". The phone's own livestream destination and video format come back whenever you remove the iPhone Camera or close OBS.
 
 ## Troubleshooting
 
@@ -94,7 +99,7 @@ In the Camera Controls menu (⋮):
 
 ## Uninstall
 
-- Windows: Settings → Apps → obs-bmagicam → Uninstall, or delete `C:\ProgramData\obs-studio\plugins\obs-bmagicam`.
+- Windows: Settings → Apps → obs-bmagicam (OBS Studio plugin) → Uninstall, or delete `C:\ProgramData\obs-studio\plugins\obs-bmagicam`.
 - macOS: delete `obs-bmagicam.plugin` from `~/Library/Application Support/obs-studio/plugins`.
 - Ubuntu: `sudo apt remove obs-bmagicam`.
 
