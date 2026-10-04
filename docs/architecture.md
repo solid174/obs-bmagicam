@@ -76,7 +76,7 @@ Examples of error texts, mapped from what the session observes:
 | --- | --- |
 | Bonjour sees the phone but HTTPS does not answer | "Blackmagic Camera isn't answering. Bring the app back to the phone's screen." |
 | `/access/status` is not `control-and-monitor` | "Blackmagic Camera only allows monitoring. Allow control in its HTTP Server settings." |
-| Stream started but no SRT connection within 5 s | "The phone can't reach OBS. Allow OBS in the firewall, and keep the phone and computer on the same network, not a guest network." |
+| Stream started but nothing arrives within 5 s | "The phone streams, but no picture arrives. Look at the phone's screen for a message from Blackmagic Camera. Otherwise allow OBS in the firewall, and keep the phone and computer on the same network, not a guest network." |
 | `/livestreams/0/available` is false | The reason, translated: for example "The phone is playing back a clip." |
 | App older than 3.4 (`version` in Bonjour TXT) | "Update Blackmagic Camera to version 3.4 or newer." |
 

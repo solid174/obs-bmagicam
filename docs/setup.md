@@ -94,10 +94,11 @@ In the Camera Controls menu (⋮):
 | The wizard never finds the phone | The app is not on screen, HTTP Server is off, or the phone is on another network | Open Blackmagic Camera, check step 2, and make sure both devices use the same Wi-Fi, not a guest network |
 | "Blackmagic Camera only allows monitoring" | Camera Available for is not set to Control and Monitor | In the app: Settings → Remote Camera Control → Camera Available for → Control and Monitor |
 | Found, but "Blackmagic Camera isn't answering" | The phone locked or the app went to the background | Unlock the phone and bring the app back; OBS reconnects by itself |
-| "The phone can't reach OBS" | The firewall blocks the stream, or the Wi-Fi is set to Public | Step 3 |
+| "The phone streams, but no picture arrives" | Blackmagic Camera shows a message on the phone, the firewall blocks the stream, or the Wi-Fi is set to Public | Answer the message on the phone; otherwise step 3 |
 | Found on macOS only after a long wait, or never | OBS was denied local network access | System Settings → Privacy & Security → Local Network → OBS → on, then restart OBS |
 | The picture stutters | Weak Wi-Fi or 2.4 GHz | Move closer to the router, use 5 GHz, or connect the computer to the iPhone's hotspot. A lower stream preset also helps |
 | The phone gets hot | Long stream with the screen at full brightness | Dock → Phone → Phone screen → Brightness down, and keep the phone out of direct sun |
+| "Audio Source Unavailable! … iPhone Microphone has been disconnected" on the phone, and the picture stops | Blackmagic Camera lost the phone's microphone; the cause is not known yet | Tap OK on the phone. OBS reconnects by itself |
 | "Update Blackmagic Camera" | App older than 3.4 | Update it from the App Store |
 
 ## Uninstall
