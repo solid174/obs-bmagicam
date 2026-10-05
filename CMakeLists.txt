@@ -112,6 +112,7 @@ target_sources(
     src/discovery/phone-browser.hpp
     src/face/face-geometry.cpp
     src/face/face-geometry.hpp
+    src/face/face-mesh.cpp
     src/face/face-models.cpp
     src/face/face-models.hpp
     src/face/face-tracker.cpp

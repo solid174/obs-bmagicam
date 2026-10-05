@@ -216,9 +216,6 @@ float OneEuroFilter::filter(float value, float seconds)
 }
 
 // MediaPipe's face mesh numbers its 478 landmarks the same in every face; these follow its outlines
-const std::array<int, 36> kFaceOutline = {10,  338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
-					  397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
-					  172, 58,  132, 93,  234, 127, 162, 21,  54,  103, 67,  109};
 const std::array<int, 16> kRightEye = {33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246};
 const std::array<int, 16> kLeftEye = {263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466};
 const std::array<int, 10> kRightBrow = {70, 63, 105, 66, 107, 55, 65, 52, 53, 46};

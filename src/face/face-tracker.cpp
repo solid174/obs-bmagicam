@@ -73,7 +73,9 @@ Detection box_of(const std::vector<Point> &points)
 } // namespace
 
 struct FaceTracker::Face {
+	// Where the landmark model looks next, and where it last found the face
 	Roi roi;
+	Roi found;
 	// Smoothed, and their motion per second, in pixels of the frame
 	std::vector<Point> points;
 	std::vector<Point> motion;
@@ -224,8 +226,13 @@ void FaceTracker::step(const FaceImage &image, double seconds)
 bool FaceTracker::follow(const FaceImage &image, Face &face, float seconds)
 {
 	std::vector<Point> points;
-	if (models_->landmarks(image, face.roi, points) < kMinPresence)
+	if (models_->landmarks(image, face.roi, points) >= kMinPresence) {
+		face.found = face.roi;
+	} else if (models_->landmarks(image, face.found, points) < kMinPresence) {
+		// Turned towards profile, the square drawn around the landmarks can miss the face by a few percent, which
+		// the model does not forgive; the square where it last found the face is tried before the face is lost
 		return false;
+	}
 	// The next frame looks where the face is now, from the landmarks as found, as MediaPipe does
 	face.roi = roi_from_landmarks(points);
 	face.smooth(points, seconds);
@@ -259,6 +266,7 @@ void FaceTracker::search(const FaceImage &image, int active, bool small)
 			known = faces_.back().get();
 		}
 		known->lost = false;
+		known->found = roi_from_detection(detection);
 		known->roi = roi_from_landmarks(points);
 		for (OneEuroFilter &filter : known->filters)
 			filter.reset();

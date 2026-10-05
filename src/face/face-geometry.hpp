@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <vector>
 
 namespace bmagicam {
@@ -95,8 +96,12 @@ private:
 	float rate_ = 0;
 };
 
-// Landmark outlines of the face and of the parts the skin mask leaves out, in order around each
-extern const std::array<int, 36> kFaceOutline;
+// The triangles of MediaPipe's canonical face mesh, three landmark indices each (src/face/face-mesh.cpp). Together they
+// cover the face as far as it is seen, at any turn.
+constexpr int kFaceMeshTriangles = 898;
+extern const std::array<uint16_t, kFaceMeshTriangles * 3> kFaceMesh;
+
+// Landmark outlines of the parts the skin mask leaves out, in order around each
 extern const std::array<int, 16> kRightEye;
 extern const std::array<int, 16> kLeftEye;
 extern const std::array<int, 10> kRightBrow;

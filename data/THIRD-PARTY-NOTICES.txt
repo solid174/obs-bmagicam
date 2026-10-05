@@ -158,8 +158,9 @@ Copyright Google LLC. Licensed under the Apache License, Version 2.0.
 
 Changes: the models in data/models are converted from TensorFlow Lite to ncnn's format by
 tools/convert-face-models.py; the weights are unchanged, and the tongue score of the landmark
-model is left out. The outlines of the face, eyes, brows and lips that the skin mask is drawn
-from (src/face/face-geometry.cpp) follow MediaPipe's numbering of the face mesh landmarks.
+model is left out. The triangles the skin mask is drawn from (src/face/face-mesh.cpp) are
+those of MediaPipe's canonical face mesh in the same bundle, and the outlines of the eyes, brows
+and lips (src/face/face-geometry.cpp) follow its numbering of the face mesh landmarks.
 
                                  Apache License
                            Version 2.0, January 2004

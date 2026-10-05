@@ -69,7 +69,7 @@ TEST_CASE("the models find the face and its landmarks")
 	std::vector<Point> points;
 	CHECK(models->landmarks(image, roi_from_detection(face), points) > 0.9f);
 	REQUIRE(points.size() == static_cast<size_t>(kLandmarkCount));
-	for (int index : kFaceOutline)
+	for (uint16_t index : kFaceMesh)
 		CHECK(inside_face(points[index]));
 	// Eyes above the mouth, the person's right eye on the picture's left
 	CHECK(points[33].x < points[263].x);
@@ -99,7 +99,7 @@ TEST_CASE("the tracker follows the face and fades it in")
 	CHECK(faces[0].weight == doctest::Approx(1.0f));
 	CHECK(faces[0].width > 0.3f);
 	CHECK(faces[0].width < 0.6f);
-	for (int index : kFaceOutline)
+	for (uint16_t index : kFaceMesh)
 		CHECK(inside_face(
 			{faces[0].landmarks[index].x * picture.width, faces[0].landmarks[index].y * picture.height}));
 }

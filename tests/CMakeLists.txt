@@ -31,6 +31,7 @@ target_sources(
     ../src/filter/beauty-styles.cpp
     ../src/filter/skin-model.cpp
     ../src/face/face-geometry.cpp
+    ../src/face/face-mesh.cpp
     ../src/face/face-models.cpp
     ../src/face/face-tracker.cpp
     ../src/stream/media-clock.cpp

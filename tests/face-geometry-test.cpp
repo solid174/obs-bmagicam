@@ -131,3 +131,17 @@ TEST_CASE("the One Euro filter holds still values and follows moving ones")
 	CHECK(value > 0.9f);
 	CHECK(moving.rate() == doctest::Approx(1.0).epsilon(0.05));
 }
+
+TEST_CASE("the face mesh's triangles are the face's landmarks")
+{
+	std::vector<bool> used(468, false);
+	for (uint16_t index : kFaceMesh) {
+		REQUIRE(index < 468);
+		used[index] = true;
+	}
+	// Every landmark of the face is a corner of some triangle, so the mesh reaches every part of the face
+	for (size_t i = 0; i < used.size(); i++)
+		CHECK(used[i]);
+	for (const auto *outline : {kRightEye.data(), kLeftEye.data(), kLips.data()})
+		CHECK(used[outline[0]]);
+}

@@ -49,6 +49,11 @@ constexpr double kMaxAhead = 0.1;
 constexpr float kEyeGrowth = 1.4f;
 constexpr float kBrowGrowth = 1.3f;
 constexpr float kLipGrowth = 1.15f;
+// The faces' mask is drawn from one vertex buffer: per face, its mesh and the fans of its eyes, brows and lips
+constexpr size_t kMaxFaces = 4;
+constexpr size_t kFaceVertices =
+	static_cast<size_t>(kFaceMeshTriangles) * 3 +
+	3 * (kRightEye.size() + kLeftEye.size() + kRightBrow.size() + kLeftBrow.size() + kLips.size());
 // Where faces are tracked, smoothing scales with their width: a face this wide smooths as any picture 1080 high
 // does without tracking, which is about a webcam close-up
 constexpr float kFaceWidth = 400.0f;
@@ -89,7 +94,7 @@ private:
 		gs_eparam_t *skin_chroma = nullptr;
 		gs_eparam_t *skin_spread = nullptr;
 		gs_eparam_t *mask_blend = nullptr;
-		gs_eparam_t *face_weight = nullptr;
+		gs_eparam_t *tracking = nullptr;
 		gs_eparam_t *guide_eps = nullptr;
 		gs_eparam_t *smoothing = nullptr;
 		gs_eparam_t *texture_keep = nullptr;
@@ -106,7 +111,8 @@ private:
 	bool capture(obs_source_t *target, obs_source_t *parent, uint32_t width, uint32_t height);
 	void pass(gs_texrender_t *target, const char *technique, uint32_t width, uint32_t height, Inputs inputs);
 	void blur_step(float x, float y);
-	void measure(gs_texture_t *half, gs_texture_t *quarter, uint32_t half_width, uint32_t half_height);
+	void measure(gs_texture_t *half, gs_texture_t *quarter, gs_texture_t *faces, uint32_t half_width,
+		     uint32_t half_height);
 	void read_stats();
 	void track(gs_texture_t *half, gs_texture_t *quarter, uint32_t width, uint32_t height);
 	float draw_faces(uint32_t width, uint32_t height, float &face_width);
@@ -142,6 +148,7 @@ private:
 	double last_track_ = -1;
 	double clock_ = 0;
 	gs_texrender_t *faces_ = nullptr;
+	gs_vertbuffer_t *face_vertices_ = nullptr;
 	// Which of the two masks is this frame's, and whether the other holds the previous frame's
 	int mask_ = 0;
 	bool mask_valid_ = false;
@@ -165,11 +172,11 @@ BeautifyFilter::BeautifyFilter(obs_source_t *context, obs_data_t *settings) : co
 		const auto param = [this](const char *name) {
 			return gs_effect_get_param_by_name(effect_, name);
 		};
-		params_ = {param("image"),       param("image2"),       param("image3"),      param("image4"),
-			   param("blur_step"),   param("block_step"),   param("texel"),       param("skin_chroma"),
-			   param("skin_spread"), param("mask_blend"),   param("face_weight"), param("guide_eps"),
-			   param("smoothing"),   param("texture_keep"), param("evening"),     param("sharpen"),
-			   param("glow"),        param("keep_edge"),    param("spot_depth"),  param("coring"),
+		params_ = {param("image"),       param("image2"),       param("image3"),     param("image4"),
+			   param("blur_step"),   param("block_step"),   param("texel"),      param("skin_chroma"),
+			   param("skin_spread"), param("mask_blend"),   param("tracking"),   param("guide_eps"),
+			   param("smoothing"),   param("texture_keep"), param("evening"),    param("sharpen"),
+			   param("glow"),        param("keep_edge"),    param("spot_depth"), param("coring"),
 			   param("mask_view")};
 	} else {
 		obs_log(LOG_WARNING, "Beautify cannot load its effect: %s", errors ? errors : "the file is missing");
@@ -189,6 +196,11 @@ BeautifyFilter::BeautifyFilter(obs_source_t *context, obs_data_t *settings) : co
 	stats_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	track_ = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
 	faces_ = gs_texrender_create(GS_R8, GS_ZS_NONE);
+	gs_vb_data *vertices = gs_vbdata_create();
+	vertices->num = kMaxFaces * kFaceVertices;
+	vertices->points = static_cast<vec3 *>(bzalloc(sizeof(vec3) * vertices->num));
+	vertices->colors = static_cast<uint32_t *>(bzalloc(sizeof(uint32_t) * vertices->num));
+	face_vertices_ = gs_vertexbuffer_create(vertices, GS_DYNAMIC);
 	obs_leave_graphics();
 	bfree(path);
 	// The tracker loads its models and starts its thread with the first frame (PWR-1)
@@ -209,6 +221,7 @@ BeautifyFilter::~BeautifyFilter()
 		gs_texrender_destroy(texrender);
 	gs_stagesurface_destroy(stage_);
 	gs_stagesurface_destroy(track_stage_);
+	gs_vertexbuffer_destroy(face_vertices_);
 	gs_effect_destroy(effect_);
 	obs_leave_graphics();
 }
@@ -281,11 +294,16 @@ void BeautifyFilter::render()
 	gs_texture_t *half = gs_texrender_get_texture(half_);
 	pass(quarter_, "Downsample", quarter_width, quarter_height, {{params_.image, half}});
 	gs_texture_t *quarter = gs_texrender_get_texture(quarter_);
-	if (frames_++ % kStatsEvery == 0)
-		measure(half, quarter, half_width, half_height);
+	// While face tracking works, only faces are retouched; the color mask then only weighs how much inside them.
+	// Without its models, the color mask works alone, as before face tracking.
 	track(half, quarter, width, height);
+	const bool tracking = tracker_ && tracker_->state() != FaceTracker::State::Failed;
 	float face_width = 0;
-	const float face_weight = draw_faces(half_width, half_height, face_width);
+	const float face_weight = tracking ? draw_faces(half_width, half_height, face_width) : 0.0f;
+	gs_texture_t *faces = tracking ? gs_texrender_get_texture(faces_) : half;
+	gs_effect_set_float(params_.tracking, tracking ? 1.0f : 0.0f);
+	if (frames_++ % kStatsEvery == 0)
+		measure(half, quarter, faces, half_width, half_height);
 
 	const BeautyAmounts &amounts = look.amounts;
 	const float noise = model_.noise();
@@ -301,12 +319,9 @@ void BeautifyFilter::render()
 	vec2_set(&vector, 1.0f / static_cast<float>(half_width), 1.0f / static_cast<float>(half_height));
 	gs_effect_set_vec2(params_.texel, &vector);
 	gs_texture_t *previous = mask_valid_ ? gs_texrender_get_texture(masks_[mask_]) : half;
-	gs_effect_set_float(params_.face_weight, face_weight);
 	mask_ = 1 - mask_;
 	pass(masks_[mask_], "Mask", half_width, half_height,
-	     {{params_.image, half},
-	      {params_.image2, previous},
-	      {params_.image3, face_weight > 0 ? gs_texrender_get_texture(faces_) : half}});
+	     {{params_.image, half}, {params_.image2, previous}, {params_.image3, faces}});
 	mask_valid_ = true;
 
 	// Fine base: a guided filter on luma, which flattens small detail and keeps contours. Its size follows the
@@ -398,7 +413,8 @@ void BeautifyFilter::blur_step(float x, float y)
 	gs_effect_set_vec2(params_.blur_step, &step);
 }
 
-void BeautifyFilter::measure(gs_texture_t *half, gs_texture_t *quarter, uint32_t half_width, uint32_t half_height)
+void BeautifyFilter::measure(gs_texture_t *half, gs_texture_t *quarter, gs_texture_t *faces, uint32_t half_width,
+			     uint32_t half_height)
 {
 	read_stats();
 	const uint32_t columns = kStatsColumns;
@@ -407,7 +423,8 @@ void BeautifyFilter::measure(gs_texture_t *half, gs_texture_t *quarter, uint32_t
 	vec2 step;
 	vec2_set(&step, 0.25f / static_cast<float>(columns), 0.25f / static_cast<float>(rows));
 	gs_effect_set_vec2(params_.block_step, &step);
-	pass(stats_, "Stats", columns, rows, {{params_.image, half}, {params_.image2, quarter}});
+	pass(stats_, "Stats", columns, rows,
+	     {{params_.image, half}, {params_.image2, quarter}, {params_.image3, faces}});
 	if (!stage_ || gs_stagesurface_get_width(stage_) != columns || gs_stagesurface_get_height(stage_) != rows) {
 		gs_stagesurface_destroy(stage_);
 		stage_ = gs_stagesurface_create(columns, rows, GS_RGBA16F);
@@ -497,12 +514,15 @@ void BeautifyFilter::track(gs_texture_t *half, gs_texture_t *quarter, uint32_t w
 	last_track_ = clock_;
 }
 
-// The tracked faces as a mask at the mask's resolution: each face's outline, less its eyes, brows and lips, as bright
-// as the face has faded in. Returns how much the mask counts, the most faded-in face's weight, and the faces' mean
-// width as a share of the picture's.
+// The tracked faces as a mask at the mask's resolution: each face's mesh, less its eyes, brows and lips, as bright as
+// the face has faded in. The mesh's triangles together cover the face as far as it is seen, at any turn of the head;
+// with no face, the mask is empty. Returns the most faded-in face's weight, and the faces' mean width as a share of
+// the picture's.
 float BeautifyFilter::draw_faces(uint32_t width, uint32_t height, float &face_width)
 {
-	const std::vector<TrackedFace> faces = tracker_ ? tracker_->faces() : std::vector<TrackedFace>();
+	std::vector<TrackedFace> faces = tracker_->faces();
+	if (faces.size() > kMaxFaces)
+		faces.resize(kMaxFaces);
 	float weight = 0;
 	float total = 0;
 	face_width = 0;
@@ -511,40 +531,31 @@ float BeautifyFilter::draw_faces(uint32_t width, uint32_t height, float &face_wi
 		total += face.weight;
 		face_width += face.weight * face.width;
 	}
-	if (weight <= 0)
-		return 0;
-	face_width /= total;
-	gs_texrender_reset(faces_);
-	if (!gs_texrender_begin(faces_, width, height))
-		return 0;
-	vec4 color;
-	vec4_zero(&color);
-	gs_clear(GS_CLEAR_COLOR, &color, 0.0f, 0);
-	gs_ortho(0.0f, 1.0f, 0.0f, 1.0f, -100.0f, 100.0f);
-	gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
-	gs_eparam_t *color_param = gs_effect_get_param_by_name(solid, "color");
-	// A fan of triangles from the outline's center; the outlines are convex enough for that
-	const auto fill = [&](const std::vector<Point> &points, const int *outline, size_t count, float growth,
-			      float brightness) {
+	if (total > 0)
+		face_width /= total;
+
+	gs_vb_data *data = gs_vertexbuffer_get_data(face_vertices_);
+	size_t count = 0;
+	const auto add = [&](const Point &point, uint32_t color) {
+		vec3_set(&data->points[count], point.x, point.y, 0.0f);
+		data->colors[count++] = color;
+	};
+	// Eyes, brows and lips as fans of triangles from their centers, which their outlines are convex enough for
+	const auto cut = [&](const std::vector<Point> &points, const int *outline, size_t size, float growth) {
 		Point center;
-		for (size_t i = 0; i < count; i++) {
-			center.x += points[outline[i]].x / static_cast<float>(count);
-			center.y += points[outline[i]].y / static_cast<float>(count);
+		for (size_t i = 0; i < size; i++) {
+			center.x += points[outline[i]].x / static_cast<float>(size);
+			center.y += points[outline[i]].y / static_cast<float>(size);
 		}
 		const auto corner = [&](size_t i) {
-			const Point &point = points[outline[i % count]];
-			gs_vertex2f(center.x + (point.x - center.x) * growth, center.y + (point.y - center.y) * growth);
+			const Point &point = points[outline[i % size]];
+			return Point{center.x + (point.x - center.x) * growth,
+				     center.y + (point.y - center.y) * growth};
 		};
-		vec4_set(&color, brightness, brightness, brightness, 1.0f);
-		gs_effect_set_vec4(color_param, &color);
-		while (gs_effect_loop(solid, "Solid")) {
-			gs_render_start(true);
-			for (size_t i = 0; i < count; i++) {
-				gs_vertex2f(center.x, center.y);
-				corner(i);
-				corner(i + 1);
-			}
-			gs_render_stop(GS_TRIS);
+		for (size_t i = 0; i < size; i++) {
+			add(center, 0xff000000u);
+			add(corner(i), 0xff000000u);
+			add(corner(i + 1), 0xff000000u);
 		}
 	};
 	// The landmarks are from a frame or two ago; each moves on as it was moving
@@ -557,14 +568,38 @@ float BeautifyFilter::draw_faces(uint32_t width, uint32_t height, float &face_wi
 				     face.landmarks[i].y + face.motion[i].y * ahead};
 		placed.push_back(std::move(points));
 	}
-	for (size_t f = 0; f < faces.size(); f++)
-		fill(placed[f], kFaceOutline.data(), kFaceOutline.size(), 1.0f, faces[f].weight);
+	for (size_t f = 0; f < faces.size(); f++) {
+		const auto level = static_cast<uint32_t>(std::lround(255.0f * std::clamp(faces[f].weight, 0.0f, 1.0f)));
+		const uint32_t color = 0xff000000u | level << 16 | level << 8 | level;
+		for (uint16_t index : kFaceMesh)
+			add(placed[f][index], color);
+	}
 	for (const std::vector<Point> &points : placed) {
-		fill(points, kRightEye.data(), kRightEye.size(), kEyeGrowth, 0.0f);
-		fill(points, kLeftEye.data(), kLeftEye.size(), kEyeGrowth, 0.0f);
-		fill(points, kRightBrow.data(), kRightBrow.size(), kBrowGrowth, 0.0f);
-		fill(points, kLeftBrow.data(), kLeftBrow.size(), kBrowGrowth, 0.0f);
-		fill(points, kLips.data(), kLips.size(), kLipGrowth, 0.0f);
+		cut(points, kRightEye.data(), kRightEye.size(), kEyeGrowth);
+		cut(points, kLeftEye.data(), kLeftEye.size(), kEyeGrowth);
+		cut(points, kRightBrow.data(), kRightBrow.size(), kBrowGrowth);
+		cut(points, kLeftBrow.data(), kLeftBrow.size(), kBrowGrowth);
+		cut(points, kLips.data(), kLips.size(), kLipGrowth);
+	}
+	if (count > 0)
+		gs_vertexbuffer_flush(face_vertices_);
+
+	gs_texrender_reset(faces_);
+	if (!gs_texrender_begin(faces_, width, height))
+		return 0;
+	vec4 color;
+	vec4_zero(&color);
+	gs_clear(GS_CLEAR_COLOR, &color, 0.0f, 0);
+	if (count > 0) {
+		gs_ortho(0.0f, 1.0f, 0.0f, 1.0f, -100.0f, 100.0f);
+		gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+		vec4_set(&color, 1.0f, 1.0f, 1.0f, 1.0f);
+		gs_effect_set_vec4(gs_effect_get_param_by_name(solid, "color"), &color);
+		gs_load_vertexbuffer(face_vertices_);
+		gs_load_indexbuffer(nullptr);
+		while (gs_effect_loop(solid, "SolidColored"))
+			gs_draw(GS_TRIS, 0, static_cast<uint32_t>(count));
+		gs_load_vertexbuffer(nullptr);
 	}
 	gs_texrender_end(faces_);
 	return weight;

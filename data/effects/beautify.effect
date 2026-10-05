@@ -22,8 +22,8 @@ uniform float2 texel;
 uniform float2 skin_chroma;
 uniform float2 skin_spread;
 uniform float mask_blend;
-// How much the tracked faces' mask replaces the color mask, 0 while no face is tracked
-uniform float face_weight;
+// 1 while face tracking works: then only the tracked faces count as skin, and their mask is in image3
+uniform float tracking;
 
 // Guided filter: variances below about this are smoothed, larger ones are edges
 uniform float guide_eps;
@@ -90,8 +90,8 @@ float4 PSDownsample(VertData v_in) : TARGET
 
 // Skin likelihood from hue and saturation against the skin's, gated by luma, and blended with the previous
 // frame's mask so nothing flickers. Saturation is compared as a ratio, so it holds at every exposure. Red keeps the
-// color mask for the next frame; green is the mask the passes use, which follows tracked faces where there are
-// any: their outlines less eyes, brows and lips, where color only weighs how much.
+// color mask for the next frame; green is the mask the passes use: while face tracking works, the tracked faces,
+// less their eyes, brows and lips, where color only weighs how much.
 float4 PSMask(VertData v_in) : TARGET
 {
 	float4 h = image.Sample(linearClamp, v_in.uv);
@@ -118,7 +118,7 @@ float4 PSMask(VertData v_in) : TARGET
 	float previous = image2.Sample(linearClamp, v_in.uv).r;
 	float m = lerp(previous, raw, mask_blend);
 	float face = image3.Sample(linearClamp, v_in.uv).r;
-	return float4(m, lerp(m, face * lerp(0.45, 1.0, m), face_weight), 0.0, 1.0);
+	return float4(m, lerp(m, face * lerp(0.45, 1.0, m), tracking), 0.0, 1.0);
 }
 
 // Guided filter, first half: horizontal means of luma, luma squared and the mask
@@ -177,7 +177,8 @@ float skin_prior(float2 cc, float y)
 }
 
 // Statistics of one block, read back for the skin model: the skin-like samples' mean chroma, how skin-like the
-// block is, and the small-scale detail of its mid-tones, which in flat blocks is the noise
+// block is, and the small-scale detail of its mid-tones, which in flat blocks is the noise. While face tracking
+// works, only samples on the faces count as skin-like, so the skin color is learned from the faces alone.
 float4 PSStats(VertData v_in) : TARGET
 {
 	float3 skin = float3(0.0, 0.0, 0.0);
@@ -187,7 +188,7 @@ float4 PSStats(VertData v_in) : TARGET
 			float2 uv = v_in.uv + (float2(float(i), float(j)) - 1.5) * block_step;
 			float4 h = image.Sample(linearClamp, uv);
 			float2 cc = chroma(h.rgb, h.a);
-			float w = skin_prior(cc, h.a);
+			float w = skin_prior(cc, h.a) * lerp(1.0, image3.Sample(linearClamp, uv).r, tracking);
 			skin += float3(w * cc, w);
 			float g = smoothstep(0.12, 0.2, h.a) * (1.0 - smoothstep(0.85, 0.95, h.a));
 			detail += float2(g * abs(h.a - image2.Sample(linearClamp, uv).a), g);

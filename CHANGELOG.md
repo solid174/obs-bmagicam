@@ -4,7 +4,7 @@ User-visible changes in each release. Versions follow [semantic versioning](http
 
 ## 1.2.0 (unreleased)
 
-- **Beautify follows faces:** it finds up to four faces in the picture and retouches each within its outline, keeping eyes, brows and lips out precisely, so skin-colored clothes, wood or a backdrop are no longer smoothed. Smoothing scales with the size of the faces. A face fades in when found and out when lost; with no face in the picture, Beautify goes by skin color as before. Runs on the CPU beside OBS, with Google's MediaPipe face models.
+- **Beautify follows faces:** it finds up to four faces in the picture and retouches only them, each as far as it is seen at any turn of the head, keeping eyes, brows and lips out precisely, so skin-colored clothes, wood or a wall are no longer smoothed, and nothing is when no face is in the picture. Smoothing scales with the size of the faces and the skin color is learned from them. A face fades in when found and out when lost, and is kept when it turns to profile. Runs on the CPU beside OBS, with Google's MediaPipe face models.
 
 ## 1.1.0 (2026-10-05)
 

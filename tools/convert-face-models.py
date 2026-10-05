@@ -9,8 +9,9 @@
     uv run tools/convert-face-models.py
 
 Downloads face_landmarker.task (float16, version 1), checks its SHA-256, and writes
-data/models/face-detector.{param,bin} and data/models/face-landmarks.{param,bin}. The weights
-stay float16, as Google ships them. docs/architecture.md, "Face tracking", describes the models.
+data/models/face-detector.{param,bin} and data/models/face-landmarks.{param,bin}, and the
+triangles of MediaPipe's canonical face mesh into src/face/face-mesh.cpp. The weights stay
+float16, as Google ships them. docs/architecture.md, "Face tracking", describes the models.
 """
 import hashlib
 import io
@@ -25,7 +26,10 @@ import tflite
 TASK_URL = ('https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/'
             'float16/1/face_landmarker.task')
 TASK_SHA256 = '64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff'
-OUT = pathlib.Path(__file__).resolve().parent.parent / 'data' / 'models'
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+OUT = ROOT / 'data' / 'models'
+MESH = ROOT / 'src' / 'face' / 'face-mesh.cpp'
+GEOMETRY = 'geometry_pipeline_metadata_landmarks.binarypb'
 
 MODELS = {
     # model file in the task bundle: (output name, {TFLite input or output: ncnn blob})
@@ -250,6 +254,64 @@ class Converter:
         (OUT / f'{stem}.bin').write_bytes(weights.getvalue())
 
 
+def varint(data, i):
+    value = shift = 0
+    while True:
+        byte = data[i]
+        i += 1
+        value |= (byte & 0x7F) << shift
+        shift += 7
+        if not byte & 0x80:
+            return value, i
+
+
+def proto_fields(data):
+    """The fields of a protobuf message: (number, wire type, value)."""
+    i = 0
+    while i < len(data):
+        key, i = varint(data, i)
+        number, wire = key >> 3, key & 7
+        if wire == 0:
+            value, i = varint(data, i)
+        elif wire == 1:
+            value, i = data[i:i + 8], i + 8
+        elif wire == 2:
+            size, i = varint(data, i)
+            value, i = data[i:i + size], i + size
+        elif wire == 5:
+            value, i = data[i:i + 4], i + 4
+        else:
+            raise ValueError(f'unsupported wire type {wire}')
+        yield number, wire, value
+
+
+def write_mesh(geometry):
+    """The canonical mesh's triangles: GeometryPipelineMetadata.canonical_mesh (1).index_buffer (4)."""
+    mesh = next(value for number, wire, value in proto_fields(geometry) if number == 1 and wire == 2)
+    indices = [value for number, wire, value in proto_fields(mesh) if number == 4 and wire == 0]
+    if len(indices) % 3 or max(indices) >= 468:
+        raise ValueError('unexpected canonical mesh')
+    rows = [', '.join(str(i) for i in indices[k:k + 12]) for k in range(0, len(indices), 12)]
+    body = ',\n\t'.join(rows)
+    MESH.write_text(f'''// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 solid174
+
+// Made by tools/convert-face-models.py from MediaPipe's face_landmarker.task (Apache-2.0)
+
+#include "face-geometry.hpp"
+
+namespace bmagicam {{
+
+// clang-format off
+const std::array<uint16_t, kFaceMeshTriangles * 3> kFaceMesh = {{
+\t{body}}};
+// clang-format on
+
+}} // namespace bmagicam
+''')
+    return len(indices) // 3
+
+
 def main():
     with urllib.request.urlopen(TASK_URL) as response:
         task = response.read()
@@ -263,6 +325,7 @@ def main():
             converter.convert()
             converter.write(stem)
             print(f'{stem}: {len(converter.layers)} layers')
+        print(f'face mesh: {write_mesh(bundle.read(GEOMETRY))} triangles')
 
 
 if __name__ == '__main__':

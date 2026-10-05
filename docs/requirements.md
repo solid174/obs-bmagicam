@@ -147,7 +147,7 @@ Beautify (BEA-1 to BEA-8) and Remote Control (WEB-1 to WEB-5) as described above
 
 ### 1.2: Face tracking for Beautify
 
-Beautify finds and follows the faces in the frame, and its skin mask follows them: each face's outline less its eyes, brows and lips, as in face-beautifier. Skin-colored things that are not a face, such as clothes, wood or a backdrop, are no longer retouched. With no face in the frame, the mask follows skin color as in 1.1.
+Beautify finds and follows the faces in the frame and retouches them alone: each face as far as it is seen, less its eyes, brows and lips, as in face-beautifier. Skin-colored things that are not a face, such as clothes, wood or a wall, are not retouched, and with no face in the frame nothing is.
 
 - **FACE-3** The skin mask follows each face, including fast head turns, without slipping onto the background, hair or other people.
 - **FACE-4** When a face is lost, the effect on it fades out smoothly and fades back in when the face is found again.
