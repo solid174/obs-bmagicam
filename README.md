@@ -2,7 +2,7 @@
 
 An OBS Studio plugin that turns an iPhone running the free Blackmagic Camera app into a 60 fps camera on your local network, with every camera setting in an OBS dock.
 
-> **Status:** version 1.1 is out: [download it from Releases](https://github.com/solid174/obs-bmagicam/releases) and follow the [setup guide](docs/setup.md). It finds the phone, receives its 1080p60 stream at about 400 ms glass to glass with hardware decoding, reconnects by itself, and puts every camera setting, looks, Set up for streaming, resets and microphone sync in the Camera Controls dock. 1.1 adds Beautify and Remote Control; face tracking for Beautify is next ([milestones](docs/architecture.md#milestones)).
+> **Status:** version 1.1 is out: [download it from Releases](https://github.com/solid174/obs-bmagicam/releases) and follow the [setup guide](docs/setup.md). It finds the phone, receives its 1080p60 stream at about 400 ms glass to glass with hardware decoding, reconnects by itself, and puts every camera setting, looks, Set up for streaming, resets and microphone sync in the Camera Controls dock. 1.1 adds Beautify and Remote Control. Face tracking for Beautify is built on main for 1.2 ([milestones](docs/architecture.md#milestones)).
 
 Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name the app the plugin works with.
 

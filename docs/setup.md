@@ -71,12 +71,12 @@ The first time OBS talks to the phone, your computer may ask for permission:
 
 ## 6. Smooth skin with Beautify
 
-Beautify smooths skin and keeps eyes, brows, lips, hair and the background sharp. It is an OBS filter, so it works on any video source: the iPhone Camera, a webcam, a capture card or a video.
+Beautify smooths skin and keeps eyes, brows, lips, hair and the background sharp. It is an OBS filter, so it works on any video source: the iPhone Camera, a webcam, a capture card or a video. It finds the faces in the picture, up to four, and retouches each within its outline, so skin-colored clothes, wood or a backdrop stay as they are.
 
 - **On the iPhone Camera:** the dock's **Beauty** row → **Add Beauty**, then choose a style and move the Beauty slider. The first half of the slider stays natural.
 - **On any other source:** right-click it → **Filters** → **+** under Effect Filters → **Beautify**.
 - **Styles:** Natural keeps skin real, Soft smooths more and adds a little glow, Glam is the strongest. **Advanced** in the dock, or in the filter's properties, shows the values a style is made of; **Save as style…** keeps your own.
-- **Show mask** colors what Beautify treats as skin. If it takes in something else of a skin-like color, such as a wooden table or a tan pet, lower **Mask softness**.
+- **Show mask** colors what Beautify treats as skin. While it finds no face, for example a face that is very small in the picture or turned away, it goes by skin color; if it then takes in something else of a skin-like color, such as a wooden table or a tan pet, lower **Mask softness**.
 - At 0, or turned off, Beautify leaves the picture exactly as it was and costs nothing.
 
 ## 7. Sync a computer microphone
@@ -118,7 +118,7 @@ Only devices on your local network can connect, and only with the password. Turn
 | Found on macOS only after a long wait, or never | OBS was denied local network access | System Settings → Privacy & Security → Local Network → OBS → on, then restart OBS |
 | The picture stutters | Weak Wi-Fi or 2.4 GHz | Move closer to the router, use 5 GHz, or connect the computer to the iPhone's hotspot. A lower stream preset also helps |
 | The Remote Control panel does not open on the phone | The phone is on another network, or the firewall blocks OBS | Put both on the same Wi-Fi; on Windows allow OBS in Windows Defender Firewall; use an address from Show Connect Info |
-| Beautify smooths something that is not skin | It has a skin-like color and little texture | Lower Mask softness; Show mask shows what counts as skin |
+| Beautify smooths something that is not skin | No face was found, so skin color decides, and it has a skin-like color and little texture | Keep the face in view and large enough, at least about a twelfth of the picture's height; lower Mask softness; Show mask shows what counts as skin |
 | The phone gets hot | Long stream with the screen at full brightness | Dock → Phone → Phone screen → Brightness down, and keep the phone out of direct sun |
 | "Audio Source Unavailable! … iPhone Microphone has been disconnected" on the phone, and the picture stops | Blackmagic Camera lost the phone's microphone; the cause is not known yet | Tap OK on the phone. OBS reconnects by itself |
 | "Update Blackmagic Camera" | App older than 3.4 | Update it from the App Store |

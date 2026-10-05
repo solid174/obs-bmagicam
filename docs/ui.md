@@ -362,7 +362,7 @@ The filter's properties follow the same split (UI-4). An "Advanced settings" swi
 | Show mask | Switch | Advanced |
 | Save as style…, Delete style | Buttons | Advanced |
 
-Moving an advanced slider turns the style into "Custom"; "Save as style…" names it.
+Moving an advanced slider turns the style into "Custom"; "Save as style…" names it. Face tracking (1.2) has no setting: Beautify always follows the faces it finds, and goes by skin color while it finds none.
 
 ## Add iPhone Camera wizard
 

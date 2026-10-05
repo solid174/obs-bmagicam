@@ -115,9 +115,9 @@ Each stage runs only while it is in use, and the hardware it needs adds up only 
 | iPhone Camera | Video decoding | Any PC that runs OBS. No dedicated GPU; hardware decoding is used when available |
 | iPhone Camera at 4K | 4K HEVC decoding | Hardware HEVC decoding: most GPUs since 2016, Apple M1 class |
 | Beautify (1.1) | Skin smoothing on the GPU | Integrated GPU, Intel Iris Xe or Apple M1 class |
-| Beautify on selected faces (1.2) | Face detection and recognition | Dedicated GPU, GTX 1660 class, or Apple M1 class |
+| Face tracking for Beautify (1.2) | Face detection and landmarks on the CPU, beside OBS's own threads | Apple M1 class, or a 4-core x86-64 CPU with AVX2 |
 
-- **PWR-1** A stage that is off costs nothing: a hidden or disabled filter runs no GPU passes, and face detection loads no models until a mode needs it.
+- **PWR-1** A stage that is off costs nothing: a hidden or disabled filter runs no GPU passes, and face tracking loads its models only with the first frame Beautify retouches.
 - **PWR-2** Turning a stage on or off takes effect immediately, without restarting OBS or the camera.
 
 ## Quality targets
@@ -145,20 +145,26 @@ iPhone Camera, Camera Controls with looks, stabilization, resets and microphone 
 
 Beautify (BEA-1 to BEA-8) and Remote Control (WEB-1 to WEB-5) as described above, the Beauty row in the dock, and the Beauty style in Add iPhone Camera.
 
-### 1.2: Face detection for Beautify
+### 1.2: Face tracking for Beautify
 
-The user chooses who Beautify applies to. Face detection runs only in Selected mode:
+Beautify finds and follows the faces in the frame, and its skin mask follows them: each face's outline less its eyes, brows and lips, as in face-beautifier. Skin-colored things that are not a face, such as clothes, wood or a backdrop, are no longer retouched. With no face in the frame, the mask follows skin color as in 1.1.
 
-| Mode | Behavior | Face detection |
-| --- | --- | --- |
-| All | Everyone in the frame is beautified, as in 1.1 | Off |
-| Selected | Only the chosen participants are beautified | On |
-| Off | Nobody is beautified | Off |
+- **FACE-3** The skin mask follows each face, including fast head turns, without slipping onto the background, hair or other people.
+- **FACE-4** When a face is lost, the effect on it fades out smoothly and fades back in when the face is found again.
+- **FACE-5** Up to 4 faces at 1080p60 on the hardware listed for face tracking.
+- **FACE-7** Where face landmarks exist, Beautify keeps eyes, brows and lips out of the skin mask precisely and scales smoothing to the size of the faces.
+- **FACE-8** Where face landmarks exist, Beautify also lifts under-eye shadows and brightens eyes.
+
+### 1.3: Selected participants
+
+The user chooses who Beautify applies to:
+
+| Mode | Behavior |
+| --- | --- |
+| All | Everyone in the frame is beautified, as in 1.2 |
+| Selected | Only the chosen participants are beautified |
+| Off | Nobody is beautified |
 
 - **FACE-1** Participants are chosen from the faces currently in the frame, by clicking them in a list of thumbnails.
 - **FACE-2** A chosen participant stays chosen when they turn away, are briefly covered, or leave the frame and come back. Others entering the frame do not take their place.
-- **FACE-3** The skin mask follows each face, including fast head turns, without slipping onto the background, hair or other people.
-- **FACE-4** When a face is lost, the effect on it fades out smoothly and fades back in when the face is found again.
-- **FACE-5** Up to 4 faces at 1080p60 on the hardware listed for selected faces.
 - **FACE-6** Selections can be saved, so a participant is recognised again in the next session.
-- **FACE-7** In Selected mode, where face landmarks exist, Beautify also lifts under-eye shadows and brightens eyes, keeps eyes, brows and lips out of the skin mask precisely, and scales smoothing to the size of each face.

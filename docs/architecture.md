@@ -46,6 +46,7 @@ src/
   source/                iPhone Camera obs_source_info, properties, histogram
   sync/                  microphone sync: capture and the GCC-PHAT lag estimate
   filter/                Beautify: the filter and its passes, styles, the skin and noise model
+  face/                  face tracking for Beautify: the models on ncnn, the detector's geometry, the tracker
   remote/                Remote Control: access rules, settings, the server, the API and its events
   ui/                    Camera Controls dock and its panels, painted controls in widgets/, wizard, setup guide
 data/
@@ -53,12 +54,15 @@ data/
   looks/builtin.json     built-in looks
   beauty/styles.json     built-in Beauty styles
   effects/beautify.effect  Beautify's GPU passes
+  models/                the face detector and the face landmark model, in ncnn's format
   panel/                 the Remote Control web panel
   images/setup/          phone screenshots for the wizard
   THIRD-PARTY-NOTICES.txt
+tools/
+  convert-face-models.py makes data/models from MediaPipe's face landmarker
 ```
 
-Modules depend downward only: `ui` uses `source`, `filter`, `remote`, `camera` and `sync`; `remote` uses `source`, `filter` and `camera`; `camera` uses `phone`, `stream` and `discovery`. Nothing below `ui` uses Qt widgets, and nothing below `camera` knows about OBS sources.
+Modules depend downward only: `ui` uses `source`, `filter`, `remote`, `camera` and `sync`; `remote` uses `source`, `filter` and `camera`; `filter` uses `face`; `camera` uses `phone`, `stream` and `discovery`. Nothing below `ui` uses Qt widgets, and nothing below `camera` knows about OBS sources.
 
 ## Camera session
 
@@ -243,19 +247,20 @@ The core idea comes from [ctbot000/face-beautifier](https://github.com/ctbot000/
 | Reference | Beautify |
 | --- | --- |
 | Gaussian base blur, which pulls color across face contours at high strength | Edge-aware base: a guided filter on luma, so contours stay clean |
+| Skin mask from face landmarks: the face's outline less eyes, brows and lips, with color as a veto | The same from 1.2 ([Face tracking](#face-tracking-12)) |
 | Fixed YCbCr thresholds for skin when there are no landmarks | Adaptive skin model: skin chroma is learned from the picture and followed slowly, so it holds for every skin tone and white balance |
 | Mask recomputed every frame | Mask blended over time, so nothing flickers (BEA-5) |
 | Edge thresholds in absolute luma | Thresholds scaled by the measured image noise, so low and high ISO give the same result |
-| Smoothing radius from the face width (landmarks) | 1.1: from the frame height and the advanced Detail size. 1.2: from each face (FACE-7) |
+| Smoothing radius from the face width (landmarks) | From the tracked faces' width and the advanced Detail size; without faces, from the frame height (FACE-7) |
 | Reshaping, makeup, color grading, vignette, grain, compare, export | Dropped (BEA-8); color is the looks' job on the phone |
-| Under-eye lift, eye brightening | 1.2, where face landmarks exist (FACE-7) |
+| Under-eye lift, eye brightening | Planned, where face landmarks exist (FACE-8) |
 
 Passes per frame, all but the first and the last at half or quarter resolution:
 
 1. **Capture** of the source at full resolution, as encoded.
 2. **Half and quarter resolution** copies, with luma alongside.
-3. **Skin mask** at half resolution. Each color's hue and saturation are compared with the learned skin color as an angle and a ratio, so the comparison holds at every exposure; colors less saturated than skin, such as gray hair, teeth and white walls, count as skin less readily. A luma gate leaves out the darkest and brightest areas. A texture gate, the luma deviation over 3 × 3 pixels, leaves out hair, lashes and brows whatever their color (BEA-4), and costs the face's outline only a thin line. Mask softness widens what counts as skin. The mask is blended with the previous frame's with a time constant of 50 ms (BEA-5).
-4. **Fine base:** a guided filter on luma at half resolution, two passes for the means and two for the coefficients, which also feather the mask. Its regularization grows with Smoothing and with the noise; its window follows the frame height and Detail size.
+3. **Skin mask** at half resolution. Each color's hue and saturation are compared with the learned skin color as an angle and a ratio, so the comparison holds at every exposure; colors less saturated than skin, such as gray hair, teeth and white walls, count as skin less readily. A luma gate leaves out the darkest and brightest areas. A texture gate, the luma deviation over 3 × 3 pixels, leaves out hair, lashes and brows whatever their color (BEA-4), and costs the face's outline only a thin line. Mask softness widens what counts as skin. The mask is blended with the previous frame's with a time constant of 50 ms (BEA-5). Where faces are tracked, the mask the later passes use is the faces' mask instead, drawn at half resolution ([Face tracking](#face-tracking-12)); inside a face, the color mask only weighs how much, from 0.45 to 1. The color mask keeps running underneath, for the next frame and for when the faces fade out.
+4. **Fine base:** a guided filter on luma at half resolution, two passes for the means and two for the coefficients, which also feather the mask. Its regularization grows with Smoothing and with the noise; its window follows Detail size and the tracked faces' width, or without faces the frame height (FACE-7).
 5. **Wide base:** a Gaussian blur at quarter resolution, the surrounding skin.
 6. **Statistics,** every sixth frame: 48 blocks across the picture, each with the mean chroma of its skin-like samples, how skin-like it is, and the small-scale detail of its mid-tones. They are read back on the next round, so reading never waits for the GPU. The skin model (`SkinModel`) takes the skin color from the skin-like blocks, refined twice around its first estimate so one area of skin wins over skin-like things elsewhere, and kept within plausible skin; the noise is the detail of the flattest fifth of the mid-tone blocks. Both follow the picture with a time constant of 1.5 s.
 7. **Composite** at full resolution:
@@ -273,9 +278,29 @@ At `s = 0` without Show mask, when the filter is disabled, or for HDR sources, t
 
 **Cost.** On a MacBook Air with Apple silicon, OBS's average frame render time at 1080p60 went from about 1.8 ms to 2.9–3.4 ms with Beautify on a 1080p source (NFR-1). Intel Iris Xe is still to measure.
 
-**Limits without face detection.** The mask comes from color and texture, so skin-colored things with little texture, such as tan fur, wood or an orange-red object, can count as skin. Show mask shows it and a lower Mask softness narrows it; Selected mode in 1.2 applies Beautify only to the chosen faces.
+**Limits without a face.** With no face tracked, for example a face too small or turned away, the mask comes from color and texture, so skin-colored things with little texture, such as tan fur, wood or an orange-red object, can count as skin. Show mask shows it and a lower Mask softness narrows it.
 
-**Tests.** Unit tests cover the styles file, the response curves and the skin model. The load test starts OBS with a Beautify filter in its scene collection, so CI compiles the effect with Direct3D 11 on Windows, OpenGL on Ubuntu and macOS, and Metal on macOS.
+**Tests.** Unit tests cover the styles file, the response curves and the skin model. The load test starts OBS with a Beautify filter in its scene collection, so CI compiles the effect with Direct3D 11 on Windows, OpenGL on Ubuntu and macOS, and Metal on macOS, and loads the face models from each package.
+
+## Face tracking (1.2)
+
+Beautify follows the faces in the picture with two of Google's MediaPipe models, those of the [Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker) (Apache-2.0), the models ctbot000/face-beautifier uses too: BlazeFace short range, which finds faces in a 128 × 128 picture, and the face mesh, which places 478 landmarks on a face in a 256 × 256 crop and says how sure it is that a face is there. `tools/convert-face-models.py` downloads `face_landmarker.task` (float16, version 1, checked by SHA-256) and converts both to ncnn's format in `data/models`, with the weights unchanged; ncnn's outputs match TensorFlow Lite's to about 1e-4. Everything runs on the CPU, on a thread of the filter's own, so a slow frame of the tracker never holds up OBS.
+
+**Frames.** The filter scales the captured frame down to at most 960 pixels on its longer side, from its half or quarter copy so each pixel averages the ones it stands for, and stages it for reading 30 times a second. The staging surface is read on the next frame, so reading never waits for the GPU. The tracker takes the newest frame and skips any it had no time for. It keeps copies at half, quarter and smaller sizes, and samples each model input from the copy nearest its scale.
+
+**Finding faces.** The detector looks at the whole frame, then at squares of the frame's shorter side and of half of it that cover the frame with a quarter's overlap: 18 squares at 16:9. BlazeFace finds faces down to about a sixth of its square, so the small squares find faces down to about a twelfth of the frame's height, as in a group at a distance. Detections of the same face are averaged, weighted by score. Each new detection becomes a face only if the landmark model, looking at a square of 1.5 times the face's box, turned with the eyes, is at least 0.5 sure that a face is there. The search runs every 0.25 s while no face is tracked and every second for more faces, up to four (FACE-5).
+
+**Following faces.** Each frame, each face's landmarks are found again where the previous frame's landmarks were, in a square 1.5 times their box, turned with the line through the outer eye corners, as MediaPipe tracks. A face whose presence drops below 0.5 is lost. A One Euro filter smooths every landmark, measured in face sizes: still faces hold steady (0.5 Hz), moving ones are followed closely (β 10); its smoothed rate of change is each landmark's motion. Faces fade in over 0.25 s when found and out over 0.4 s when lost (FACE-4); a lost face found again fades back from where it was. After a gap of more than a second, such as a hidden source, faces are looked for afresh.
+
+**The mask.** On the graphics thread, each face is drawn where its landmarks' motion takes them by the time the frame is shown, at most 0.1 s ahead: staging, waiting for the tracker's next turn and the models put the landmarks 30–60 ms behind the picture, which in a quick head turn is a third of a face. Each face's outline (36 landmarks) is drawn as a fan of triangles into a half-resolution mask, as bright as the face has faded in; then the eyes, brows and lips are drawn out, grown by 1.4, 1.3 and 1.15 about their centers so the mask's soft edge stays off them (FACE-7). The mask pass blends it with the color mask by the most faded-in face's weight, so with no face the color mask is back, and the guided filter's passes feather it like the color mask. Smoothing's window scales with the faces' mean width from cheek to cheek: a face 400 pixels wide smooths as a 1080-high picture did without tracking, about a webcam close-up.
+
+**Why ncnn.** ncnn is linked into the plugin as a static library of a few megabytes, built with only the layers the models and ncnn itself use. It runs on every platform OBS does, Intel Macs included, and puts no shared library into OBS's process that another plugin's copy could clash with. ONNX Runtime, the usual choice, ships as a large shared library per platform (its macOS download alone is 42 MB) and has had no Intel macOS build since 1.24. ncnn is built at configure time from a pinned release, as the template builds OBS's libraries (`cmake/ncnn.cmake`), without OpenMP, Vulkan and tools; on macOS once per architecture, combined with `lipo`, with each architecture's `platform.h`.
+
+**Cost.** On a MacBook Air with Apple M4, one thread: the landmark model takes 1.9 ms per face and the detector 0.75 ms per square, so following one face 30 times a second takes about 6 % of a core and a search about 14 ms once a second. OBS's CPU use did not change measurably with the iPhone Camera at 1080p60. Intel CPUs are still to measure.
+
+**Limits.** Faces smaller than about a twelfth of the frame's height, or seen nearly in profile, are not found; with no face found, the color mask takes over. When a face starts or stops moving quickly, the drawn mask overshoots or trails by a few percent of the face for a moment; the soft edge hides it. Tested with a portrait panned at up to 1300 pixels a second at 1080p60.
+
+**Tests.** Unit tests cover the detector's decoding, the detection squares, the landmark model's region and its transform, the One Euro filter, both models on a portrait (`tests/data/face.ppm`, a public-domain NASA photo) and the tracker thread.
 
 ## Stabilization
 
@@ -324,9 +349,11 @@ The phone stabilizes from its gyroscope before encoding, and Blackmagic Camera o
 | nlohmann/json | JSON | obs-deps | Distribution | MIT |
 | qrcodegen (1.1) | Connect QR code | obs-deps | Distribution | MIT |
 | cpp-httplib | HTTPS and WebSocket client, HTTP and WebSocket server | Fetched at a pinned release | Same | MIT |
+| ncnn (1.2) | Runs the face models on the CPU | Built from a pinned release at configure time | Same | BSD-3-Clause |
+| MediaPipe Face Landmarker models (1.2) | Face detection and landmarks | `data/models`, converted by `tools/convert-face-models.py` | Same | Apache-2.0 |
 | DNS-SD | Discovery | System | Avahi client | System, LGPL-2.1 |
 
-Everything except cpp-httplib is already part of what OBS builds against. cpp-httplib is a single header.
+Everything except cpp-httplib and ncnn is already part of what OBS builds against. cpp-httplib is a single header; ncnn is linked statically ([Why ncnn](#face-tracking-12)).
 
 ## Decisions
 
@@ -334,13 +361,14 @@ Everything except cpp-httplib is already part of what OBS builds against. cpp-ht
 | --- | --- | --- | --- |
 | D1 | Video comes from the phone's livestream over SRT to a destination the plugin adds | The app has no other way to send video over the network; verified end to end at 1080p60 | HDMI or USB capture (needs hardware), NDI (not in the app), RTMP (needs an RTMP server; TCP stalls on Wi-Fi loss) |
 | D2 | Own receiver on FFmpeg | OBS's Media Source added about 0.9 s and took 2.2 s to show the first frame | Wrapping `ffmpeg_source` |
-| D3 | Link the dependencies OBS already ships; add only cpp-httplib | Least to build and maintain | Bundling an own FFmpeg (supports more OBS versions per build, at the cost of a full FFmpeg build per platform) |
+| D3 | Link the dependencies OBS already ships; add only cpp-httplib, and ncnn for face tracking | Least to build and maintain | Bundling an own FFmpeg (supports more OBS versions per build, at the cost of a full FFmpeg build per platform) |
 | D4 | cpp-httplib for both the phone client and the plugin's server | One library for HTTPS, WSS, HTTP and WebSocket | Qt Network (OBS ships no Qt TLS backend or Qt WebSockets on macOS); libcurl (system builds lack WebSocket support) |
 | D5 | Each OS's own DNS-SD service | Follows the OS's network and privacy rules | A portable raw-multicast library |
 | D6 | Live controls in a dock, connection and stream in source properties | That is where OBS puts live controls and per-source settings (UI-2) | Everything in properties |
 | D7 | Looks on the phone | Applied before compression, free for OBS, same on the phone screen (verified) | An OBS color filter |
 | D8 | No certificate verification towards the phone | Self-signed certificate, no secrets on the connection | Trust on first use (more UI, no real gain on a LAN) |
 | D9 | The phone owns lighting-dependent settings; the source owns stream and look | Reproducible look per scene collection without overwriting the user's exposure | Re-applying all stored camera values |
+| D10 | Face models on ncnn, linked statically, converted from MediaPipe's TensorFlow Lite files by our own script | Small, every OBS platform, nothing in OBS's process for another plugin to clash with; the script needs only `tflite` and `numpy` | ONNX Runtime (large shared library, no Intel macOS build since 1.24), LiteRT (no Windows build), MediaPipe itself (Bazel), converting with tf2onnx and pnnx (needs TensorFlow, and pnnx leaves the models' channel padding unconverted) |
 
 ## Verification items
 
@@ -388,3 +416,5 @@ Each milestone leaves a working plugin on all three platforms.
 | M5 Release 1.0 | Wizard with screenshots, Russian, theme pass, Windows installer, license notices, documentation, signing and notarization where the Apple Developer membership allows | The release checklist in [releasing.md](releasing.md) passes |
 | M3 Beautify (1.1) | Beautify with styles, the Beauty slider, advanced sliders and show mask | BEA-1 to BEA-8 and NFR-1 met on the listed hardware |
 | M4 Remote Control (1.1) | Control descriptors, server, API, web panel, Tools dialog | WEB-1 to WEB-5; the panel controls everything the dock does |
+| M6 Face tracking (1.2) | Face models on ncnn, the tracker, the faces' mask, smoothing scaled to faces, under-eye lift and eye brightening | FACE-3 to FACE-5, FACE-7 and FACE-8 on the listed hardware |
+| M7 Selected participants (1.3) | Modes, thumbnails of the faces in the frame, face recognition, saved selections | FACE-1, FACE-2 and FACE-6 |

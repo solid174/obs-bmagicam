@@ -2,6 +2,10 @@
 
 User-visible changes in each release. Versions follow [semantic versioning](https://semver.org).
 
+## 1.2.0 (unreleased)
+
+- **Beautify follows faces:** it finds up to four faces in the picture and retouches each within its outline, keeping eyes, brows and lips out precisely, so skin-colored clothes, wood or a backdrop are no longer smoothed. Smoothing scales with the size of the faces. A face fades in when found and out when lost; with no face in the picture, Beautify goes by skin color as before. Runs on the CPU beside OBS, with Google's MediaPipe face models.
+
 ## 1.1.0 (2026-10-05)
 
 - **Beautify:** a skin smoothing filter for any video source, on the GPU. Styles Natural, Soft and Glam and your own, one Beauty slider, and advanced values for smoothing, texture, tone evening, sharpening, glow, mask softness and detail size. The skin mask adapts to every skin tone and white balance and keeps eyes, brows, lips, hair and the background sharp; Show mask shows it. At 0 or turned off it leaves the picture untouched. In the dock as a Beauty row (Simple) and tab (Advanced), and as a choice in Add iPhone Camera.
