@@ -24,6 +24,11 @@ struct TrackedFace {
 	std::vector<Point> landmarks;
 	// Fades in when the face is found and out when it is lost, 0–1 (FACE-4)
 	float weight = 0;
+	// How fast each landmark moves, in shares of the frame per second, so the mask can be drawn where the face is
+	// by the time it is shown
+	std::vector<Point> motion;
+	// The time of the frame the landmarks are from, as handed over
+	double seconds = 0;
 	// The face's width from cheek to cheek, as a share of the frame's width
 	float width = 0;
 };
@@ -60,7 +65,7 @@ private:
 	void step(const FaceImage &image, double seconds);
 	void search(const FaceImage &image, int active);
 	bool follow(const FaceImage &image, Face &face, float seconds);
-	void publish(int width, int height);
+	void publish(int width, int height, double seconds);
 
 	const std::string model_directory_;
 	std::shared_ptr<FaceModels> models_;

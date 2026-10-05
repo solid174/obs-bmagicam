@@ -172,4 +172,6 @@ set_target_properties(
     IMPORTED_LOCATION "${_ncnn_library}"
     INTERFACE_INCLUDE_DIRECTORIES "${_ncnn_dir}/include/ncnn"
     INTERFACE_LINK_LIBRARIES Threads::Threads
+    # ncnn's headers include windows.h, whose min and max macros would break std::min and std::max
+    INTERFACE_COMPILE_DEFINITIONS $<$<PLATFORM_ID:Windows>:NOMINMAX>
 )

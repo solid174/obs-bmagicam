@@ -82,14 +82,17 @@ public:
 
 	float filter(float value, float seconds);
 	void reset() { started_ = false; }
+	// How fast the value changes, per second, smoothed
+	float rate() const { return rate_; }
 
 private:
 	float min_cutoff_;
 	float beta_;
 	float derivative_cutoff_;
 	bool started_ = false;
+	float raw_ = 0;
 	float value_ = 0;
-	float derivative_ = 0;
+	float rate_ = 0;
 };
 
 // Landmark outlines of the face and of the parts the skin mask leaves out, in order around each

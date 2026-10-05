@@ -39,9 +39,13 @@ constexpr uint64_t kStatsEvery = 6;
 // How fast the skin model and the mask follow the picture
 constexpr float kModelSeconds = 1.5f;
 constexpr float kMaskSeconds = 0.05f;
-// Face tracking looks at frames this often, at most this large on their longer side
+// Face tracking looks at frames this often, at most this large on their longer side. The interval is checked a little
+// short, so a 60 fps picture is tracked every second frame although the frame times are rounded.
 constexpr double kTrackSeconds = 1.0 / 30.0;
+constexpr double kTrackSlack = 0.003;
 constexpr uint32_t kTrackSize = 960;
+// The mask is drawn where the faces' motion takes them by the time it is shown, at most this far ahead
+constexpr double kMaxAhead = 0.1;
 // The mask leaves out eyes, brows and lips grown by these factors, so its soft edge stays off them
 constexpr float kEyeGrowth = 1.4f;
 constexpr float kBrowGrowth = 1.3f;
@@ -472,7 +476,7 @@ void BeautifyFilter::track(gs_texture_t *half, gs_texture_t *quarter, uint32_t w
 					static_cast<int>(frame_height), track_seconds_);
 		}
 	}
-	if (clock_ - last_track_ < kTrackSeconds || !tracker_->wants_frame())
+	if (clock_ - last_track_ < kTrackSeconds - kTrackSlack || !tracker_->wants_frame())
 		return;
 	// Scaled down from the copy nearest the tracker's size, so each pixel averages the ones it stands for
 	const float scale =
@@ -544,14 +548,24 @@ float BeautifyFilter::draw_faces(uint32_t width, uint32_t height, float &face_wi
 			gs_render_stop(GS_TRIS);
 		}
 	};
-	for (const TrackedFace &face : faces)
-		fill(face.landmarks, kFaceOutline.data(), kFaceOutline.size(), 1.0f, face.weight);
+	// The landmarks are from a frame or two ago; each moves on as it was moving
+	std::vector<std::vector<Point>> placed;
 	for (const TrackedFace &face : faces) {
-		fill(face.landmarks, kRightEye.data(), kRightEye.size(), kEyeGrowth, 0.0f);
-		fill(face.landmarks, kLeftEye.data(), kLeftEye.size(), kEyeGrowth, 0.0f);
-		fill(face.landmarks, kRightBrow.data(), kRightBrow.size(), kBrowGrowth, 0.0f);
-		fill(face.landmarks, kLeftBrow.data(), kLeftBrow.size(), kBrowGrowth, 0.0f);
-		fill(face.landmarks, kLips.data(), kLips.size(), kLipGrowth, 0.0f);
+		const auto ahead = static_cast<float>(std::clamp(clock_ - face.seconds, 0.0, kMaxAhead));
+		std::vector<Point> points(face.landmarks.size());
+		for (size_t i = 0; i < points.size(); i++)
+			points[i] = {face.landmarks[i].x + face.motion[i].x * ahead,
+				     face.landmarks[i].y + face.motion[i].y * ahead};
+		placed.push_back(std::move(points));
+	}
+	for (size_t f = 0; f < faces.size(); f++)
+		fill(placed[f], kFaceOutline.data(), kFaceOutline.size(), 1.0f, faces[f].weight);
+	for (const std::vector<Point> &points : placed) {
+		fill(points, kRightEye.data(), kRightEye.size(), kEyeGrowth, 0.0f);
+		fill(points, kLeftEye.data(), kLeftEye.size(), kEyeGrowth, 0.0f);
+		fill(points, kRightBrow.data(), kRightBrow.size(), kBrowGrowth, 0.0f);
+		fill(points, kLeftBrow.data(), kLeftBrow.size(), kBrowGrowth, 0.0f);
+		fill(points, kLips.data(), kLips.size(), kLipGrowth, 0.0f);
 	}
 	gs_texrender_end(faces_);
 	return weight;

@@ -66,8 +66,9 @@ Detection box_of(const std::vector<Point> &points)
 
 struct FaceTracker::Face {
 	Roi roi;
-	// Smoothed, in pixels of the frame
+	// Smoothed, and their motion per second, in pixels of the frame
 	std::vector<Point> points;
+	std::vector<Point> motion;
 	std::vector<OneEuroFilter> filters;
 	float weight = 0;
 	bool lost = false;
@@ -80,9 +81,11 @@ struct FaceTracker::Face {
 	{
 		const float size = std::max(roi.size, 1.0f);
 		points.resize(found.size());
+		motion.resize(found.size());
 		for (size_t i = 0; i < found.size(); i++) {
 			points[i].x = filters[2 * i].filter(found[i].x / size, seconds) * size;
 			points[i].y = filters[2 * i + 1].filter(found[i].y / size, seconds) * size;
+			motion[i] = {filters[2 * i].rate() * size, filters[2 * i + 1].rate() * size};
 		}
 	}
 };
@@ -195,7 +198,7 @@ void FaceTracker::step(const FaceImage &image, double seconds)
 		last_search_ = seconds;
 		search(image, active);
 	}
-	publish(image.width(), image.height());
+	publish(image.width(), image.height(), seconds);
 }
 
 bool FaceTracker::follow(const FaceImage &image, Face &face, float seconds)
@@ -240,7 +243,7 @@ void FaceTracker::search(const FaceImage &image, int active)
 	}
 }
 
-void FaceTracker::publish(int width, int height)
+void FaceTracker::publish(int width, int height, double seconds)
 {
 	std::vector<TrackedFace> faces;
 	for (const auto &face : faces_) {
@@ -248,10 +251,17 @@ void FaceTracker::publish(int width, int height)
 			continue;
 		TrackedFace tracked;
 		tracked.weight = face->weight;
+		tracked.seconds = seconds;
+		const auto w = static_cast<float>(width);
+		const auto h = static_cast<float>(height);
 		tracked.landmarks.reserve(face->points.size());
-		for (const Point &point : face->points)
-			tracked.landmarks.push_back(
-				{point.x / static_cast<float>(width), point.y / static_cast<float>(height)});
+		tracked.motion.reserve(face->points.size());
+		for (size_t i = 0; i < face->points.size(); i++) {
+			// A lost face stays where it was last seen while it fades out
+			const Point moving = face->lost ? Point{} : face->motion[i];
+			tracked.landmarks.push_back({face->points[i].x / w, face->points[i].y / h});
+			tracked.motion.push_back({moving.x / w, moving.y / h});
+		}
 		const Point &right = face->points[kRightCheek];
 		const Point &left = face->points[kLeftCheek];
 		tracked.width = std::hypot(left.x - right.x, left.y - right.y) / static_cast<float>(width);

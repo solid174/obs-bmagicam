@@ -127,6 +127,7 @@ TEST_CASE("the One Euro filter holds still values and follows moving ones")
 	float value = 0;
 	for (int i = 0; i <= 60; i++)
 		value = moving.filter(static_cast<float>(i) / 60, 1.0f / 60);
-	// One face size per second: within a few frames of the motion
+	// One face size per second: within a few frames of the motion, and its rate is the motion's
 	CHECK(value > 0.9f);
+	CHECK(moving.rate() == doctest::Approx(1.0).epsilon(0.05));
 }

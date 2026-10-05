@@ -199,17 +199,18 @@ std::array<float, 6> roi_transform(const Roi &roi, int input_size)
 
 float OneEuroFilter::filter(float value, float seconds)
 {
-	if (!started_ || seconds <= 0) {
-		if (!started_) {
-			started_ = true;
-			value_ = value;
-			derivative_ = 0;
-		}
+	if (!started_) {
+		started_ = true;
+		raw_ = value;
+		value_ = value;
+		rate_ = 0;
 		return value_;
 	}
-	const float rate = (value - value_) / seconds;
-	derivative_ += alpha(derivative_cutoff_, seconds) * (rate - derivative_);
-	const float cutoff = min_cutoff_ + beta_ * std::fabs(derivative_);
+	if (seconds <= 0)
+		return value_;
+	rate_ += alpha(derivative_cutoff_, seconds) * ((value - raw_) / seconds - rate_);
+	raw_ = value;
+	const float cutoff = min_cutoff_ + beta_ * std::fabs(rate_);
 	value_ += alpha(cutoff, seconds) * (value - value_);
 	return value_;
 }
