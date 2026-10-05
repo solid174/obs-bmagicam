@@ -17,9 +17,11 @@ constexpr int kMaxFaces = 4;
 // How sure the models must be: the detector to try a face, the landmark model to keep it
 constexpr float kMinScore = 0.5f;
 constexpr float kMinPresence = 0.5f;
-// Seconds between searches for faces: often while there is none, now and then for more
+// Seconds between searches for faces: often while there is none, now and then for more. The small squares, for faces
+// far away, are searched once a second only; they are most of the detector's work.
 constexpr double kSearchAlone = 0.25;
 constexpr double kSearchMore = 1.0;
+constexpr double kSearchSmall = 1.0;
 // Frames arrive about when asked for, a little early or late, so a search is due a little before its time
 constexpr double kEarly = 0.01;
 // Faces are followed 30 times a second, with at most 60 runs of the landmark model a second, so four faces cost as
@@ -179,6 +181,7 @@ void FaceTracker::step(const FaceImage &image, double seconds)
 	if (image.width() != width_ || image.height() != height_ || elapsed > kStale || elapsed < 0) {
 		faces_.clear();
 		last_search_ = -1e9;
+		last_small_search_ = -1e9;
 		width_ = image.width();
 		height_ = image.height();
 		elapsed = 0;
@@ -209,8 +212,11 @@ void FaceTracker::step(const FaceImage &image, double seconds)
 		     faces_.end());
 
 	if (active < kMaxFaces && seconds - last_search_ >= (active == 0 ? kSearchAlone : kSearchMore) - kEarly) {
+		const bool small = seconds - last_small_search_ >= kSearchSmall - kEarly;
 		last_search_ = seconds;
-		search(image, active);
+		if (small)
+			last_small_search_ = seconds;
+		search(image, active, small);
 	}
 	publish(image.width(), image.height(), seconds);
 }
@@ -226,10 +232,14 @@ bool FaceTracker::follow(const FaceImage &image, Face &face, float seconds)
 	return true;
 }
 
-void FaceTracker::search(const FaceImage &image, int active)
+void FaceTracker::search(const FaceImage &image, int active, bool small)
 {
 	std::vector<Detection> found;
+	// Squares of the frame's shorter side and larger are searched every time
+	const float large = static_cast<float>(std::min(image.width(), image.height()));
 	for (const Square &square : detection_squares(image.width(), image.height())) {
+		if (!small && square.size < large)
+			continue;
 		std::vector<Detection> detections = models_->detect(image, square, kMinScore);
 		found.insert(found.end(), detections.begin(), detections.end());
 	}

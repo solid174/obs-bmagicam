@@ -66,7 +66,7 @@ private:
 
 	void run();
 	void step(const FaceImage &image, double seconds);
-	void search(const FaceImage &image, int active);
+	void search(const FaceImage &image, int active, bool small);
 	bool follow(const FaceImage &image, Face &face, float seconds);
 	void publish(int width, int height, double seconds);
 
@@ -87,6 +87,7 @@ private:
 	std::vector<std::unique_ptr<Face>> faces_;
 	double last_seconds_ = 0;
 	double last_search_ = -1e9;
+	double last_small_search_ = -1e9;
 	int width_ = 0;
 	int height_ = 0;
 };

@@ -123,7 +123,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.deps
-          key: ${{ runner.os }}-deps-${{ hashFiles('buildspec.json') }}
+          key: ${{ runner.os }}-deps-${{ hashFiles('buildspec.json', 'cmake/ncnn.cmake') }}
 
       - name: Set Up Codesigning 🔑
         uses: ./.github/actions/setup-macos-codesigning
@@ -222,6 +222,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.os }}-ccache-x86_64-
 
+      - uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.deps
+          key: ${{ runner.os }}-${{ matrix.os }}-deps-${{ hashFiles('cmake/ncnn.cmake') }}
+
       - name: Build Plugin 🧱
         uses: ./.github/actions/build-plugin
         with:
@@ -297,7 +302,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.deps
-          key: ${{ runner.os }}-deps-${{ hashFiles('buildspec.json') }}
+          key: ${{ runner.os }}-deps-${{ hashFiles('buildspec.json', 'cmake/ncnn.cmake') }}
 
       - name: Build Plugin 🧱
         uses: ./.github/actions/build-plugin
