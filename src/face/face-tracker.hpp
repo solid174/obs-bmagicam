@@ -44,6 +44,9 @@ public:
 
 	// Whether a frame handed over now would be tracked next: none is waiting already
 	bool wants_frame() const;
+	// How often the tracker wants frames, in seconds: often while it follows faces, less with more faces, and
+	// only for its searches while it follows none
+	double interval() const;
 	// Hands over a frame of 8-bit RGBA pixels taken at the time, in seconds. A frame still waiting is replaced.
 	void track(std::vector<uint8_t> pixels, int width, int height, double seconds);
 	// The faces as of the latest tracked frame
@@ -77,6 +80,7 @@ private:
 	bool stopping_ = false;
 	State state_ = State::Starting;
 	std::vector<TrackedFace> published_;
+	int followed_ = 0;
 	std::thread thread_;
 
 	// Only used on the tracker's thread

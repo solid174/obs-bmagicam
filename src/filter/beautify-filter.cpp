@@ -39,11 +39,10 @@ constexpr uint64_t kStatsEvery = 6;
 // How fast the skin model and the mask follow the picture
 constexpr float kModelSeconds = 1.5f;
 constexpr float kMaskSeconds = 0.05f;
-// Face tracking looks at frames this often, at most this large on their longer side. The interval is checked a little
-// short, so a 60 fps picture is tracked every second frame although the frame times are rounded.
-constexpr double kTrackSeconds = 1.0 / 30.0;
-constexpr double kTrackSlack = 0.003;
+// Face tracking gets frames at most this large on their longer side, as often as it asks for them. The interval is
+// checked a little short, so a 60 fps picture is tracked every second frame although the frame times are rounded.
 constexpr uint32_t kTrackSize = 960;
+constexpr double kTrackSlack = 0.003;
 // The mask is drawn where the faces' motion takes them by the time it is shown, at most this far ahead
 constexpr double kMaxAhead = 0.1;
 // The mask leaves out eyes, brows and lips grown by these factors, so its soft edge stays off them
@@ -476,7 +475,7 @@ void BeautifyFilter::track(gs_texture_t *half, gs_texture_t *quarter, uint32_t w
 					static_cast<int>(frame_height), track_seconds_);
 		}
 	}
-	if (clock_ - last_track_ < kTrackSeconds - kTrackSlack || !tracker_->wants_frame())
+	if (clock_ - last_track_ < tracker_->interval() - kTrackSlack || !tracker_->wants_frame())
 		return;
 	// Scaled down from the copy nearest the tracker's size, so each pixel averages the ones it stands for
 	const float scale =

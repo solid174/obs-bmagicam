@@ -20,6 +20,12 @@ constexpr float kMinPresence = 0.5f;
 // Seconds between searches for faces: often while there is none, now and then for more
 constexpr double kSearchAlone = 0.25;
 constexpr double kSearchMore = 1.0;
+// Frames arrive about when asked for, a little early or late, so a search is due a little before its time
+constexpr double kEarly = 0.01;
+// Faces are followed 30 times a second, with at most 60 runs of the landmark model a second, so four faces cost as
+// much as two; the mask is drawn ahead by the faces' motion in between
+constexpr double kFollowSeconds = 1.0 / 30;
+constexpr double kLandmarkSeconds = 1.0 / 60;
 // Seconds a face takes to fade in when found and out when lost (FACE-4)
 constexpr float kFadeIn = 0.25f;
 constexpr float kFadeOut = 0.4f;
@@ -129,6 +135,14 @@ std::vector<TrackedFace> FaceTracker::faces() const
 	return published_;
 }
 
+double FaceTracker::interval() const
+{
+	std::lock_guard lock(mutex_);
+	if (followed_ == 0)
+		return kSearchAlone;
+	return std::max(kFollowSeconds, followed_ * kLandmarkSeconds);
+}
+
 FaceTracker::State FaceTracker::state() const
 {
 	std::lock_guard lock(mutex_);
@@ -194,7 +208,7 @@ void FaceTracker::step(const FaceImage &image, double seconds)
 				    [](const auto &face) { return face->lost && face->weight <= 0; }),
 		     faces_.end());
 
-	if (active < kMaxFaces && seconds - last_search_ >= (active == 0 ? kSearchAlone : kSearchMore)) {
+	if (active < kMaxFaces && seconds - last_search_ >= (active == 0 ? kSearchAlone : kSearchMore) - kEarly) {
 		last_search_ = seconds;
 		search(image, active);
 	}
@@ -246,7 +260,9 @@ void FaceTracker::search(const FaceImage &image, int active)
 void FaceTracker::publish(int width, int height, double seconds)
 {
 	std::vector<TrackedFace> faces;
+	int followed = 0;
 	for (const auto &face : faces_) {
+		followed += !face->lost;
 		if (face->weight <= 0)
 			continue;
 		TrackedFace tracked;
@@ -269,6 +285,7 @@ void FaceTracker::publish(int width, int height, double seconds)
 	}
 	std::lock_guard lock(mutex_);
 	published_ = std::move(faces);
+	followed_ = followed;
 }
 
 } // namespace bmagicam
