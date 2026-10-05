@@ -253,7 +253,7 @@ The core idea comes from [ctbot000/face-beautifier](https://github.com/ctbot000/
 | Edge thresholds in absolute luma | Thresholds scaled by the measured image noise, so low and high ISO give the same result |
 | Smoothing radius from the face width (landmarks) | From the tracked faces' width and the advanced Detail size; without faces, from the frame height (FACE-7) |
 | Reshaping, makeup, color grading, vignette, grain, compare, export | Dropped (BEA-8); color is the looks' job on the phone |
-| Under-eye lift, eye brightening | Planned, where face landmarks exist (FACE-8) |
+| Under-eye lift, eye brightening | 1.3, where face landmarks exist (FACE-8) |
 
 Passes per frame, all but the first and the last at half or quarter resolution:
 
@@ -416,5 +416,5 @@ Each milestone leaves a working plugin on all three platforms.
 | M5 Release 1.0 | Wizard with screenshots, Russian, theme pass, Windows installer, license notices, documentation, signing and notarization where the Apple Developer membership allows | The release checklist in [releasing.md](releasing.md) passes |
 | M3 Beautify (1.1) | Beautify with styles, the Beauty slider, advanced sliders and show mask | BEA-1 to BEA-8 and NFR-1 met on the listed hardware |
 | M4 Remote Control (1.1) | Control descriptors, server, API, web panel, Tools dialog | WEB-1 to WEB-5; the panel controls everything the dock does |
-| M6 Face tracking (1.2) | Face models on ncnn, the tracker, the faces' mask, smoothing scaled to faces, under-eye lift and eye brightening | FACE-3 to FACE-5, FACE-7 and FACE-8 on the listed hardware |
-| M7 Selected participants (1.3) | Modes, thumbnails of the faces in the frame, face recognition, saved selections | FACE-1, FACE-2 and FACE-6 |
+| M6 Face tracking (1.2) | Face models on ncnn, the tracker, the faces' mask, smoothing scaled to faces | FACE-3 to FACE-5 and FACE-7 on the listed hardware |
+| M7 Selected participants and eyes (1.3) | Under-eye lift and eye brightening; modes, thumbnails of the faces in the frame, face recognition, saved selections | FACE-1, FACE-2, FACE-6 and FACE-8 |

@@ -2,7 +2,7 @@
 
 An OBS Studio plugin that turns an iPhone running the free Blackmagic Camera app into a 60 fps camera on your local network, with every camera setting in an OBS dock.
 
-> **Status:** version 1.1 is out: [download it from Releases](https://github.com/solid174/obs-bmagicam/releases) and follow the [setup guide](docs/setup.md). It finds the phone, receives its 1080p60 stream at about 400 ms glass to glass with hardware decoding, reconnects by itself, and puts every camera setting, looks, Set up for streaming, resets and microphone sync in the Camera Controls dock. 1.1 adds Beautify and Remote Control. Face tracking for Beautify is built on main for 1.2 ([milestones](docs/architecture.md#milestones)).
+> **Status:** version 1.2 is out: [download it from Releases](https://github.com/solid174/obs-bmagicam/releases) and follow the [setup guide](docs/setup.md). It finds the phone, receives its 1080p60 stream at about 400 ms glass to glass with hardware decoding, reconnects by itself, and puts every camera setting, looks, Set up for streaming, resets and microphone sync in the Camera Controls dock. 1.1 added Beautify and Remote Control; 1.2 makes Beautify follow faces ([milestones](docs/architecture.md#milestones)).
 
 Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name the app the plugin works with.
 
@@ -14,7 +14,7 @@ Not affiliated with Blackmagic Design. "Blackmagic Camera" is used only to name 
 - **Stabilization** from the phone itself, Standard, Cinematic or Extreme, for handheld shots.
 - **Microphone in sync.** A microphone on your computer runs ahead of the iPhone's picture; one click measures the delay from your voice and sets it.
 - **Safe to try.** Reset the camera to its defaults, or restore exactly the settings your phone had before.
-- **Beautify.** Skin smoothing for any video source, on the GPU: one Beauty slider, styles from Natural to Glam, and advanced values. Eyes, brows, lips, hair and the background stay sharp.
+- **Beautify.** Skin smoothing for any video source, on the GPU: one Beauty slider, styles from Natural to Glam, and advanced values. It follows up to four faces and retouches only them, so eyes, brows, lips, hair and everything around stay sharp.
 - **Remote Control.** A web panel for a phone or tablet with everything the dock has, and an API with live events for Stream Deck, Companion and scripts. Off until you turn it on; local network only, with a password.
 - Windows, macOS and Linux. English and Russian.
 

@@ -153,9 +153,12 @@ Beautify finds and follows the faces in the frame and retouches them alone: each
 - **FACE-4** When a face is lost, the effect on it fades out smoothly and fades back in when the face is found again.
 - **FACE-5** Up to 4 faces at 1080p60 on the hardware listed for face tracking.
 - **FACE-7** Where face landmarks exist, Beautify keeps eyes, brows and lips out of the skin mask precisely and scales smoothing to the size of the faces.
-- **FACE-8** Where face landmarks exist, Beautify also lifts under-eye shadows and brightens eyes.
 
-### 1.3: Selected participants
+### 1.3: Selected participants and eyes
+
+Beautify also lifts under-eye shadows and brightens eyes:
+
+- **FACE-8** Where face landmarks exist, Beautify also lifts under-eye shadows and brightens eyes.
 
 The user chooses who Beautify applies to:
 

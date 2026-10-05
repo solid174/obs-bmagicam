@@ -2,7 +2,7 @@
 
 User-visible changes in each release. Versions follow [semantic versioning](https://semver.org).
 
-## 1.2.0 (unreleased)
+## 1.2.0 (2026-10-05)
 
 - **Beautify follows faces:** it finds up to four faces in the picture and retouches only them, each as far as it is seen at any turn of the head, keeping eyes, brows and lips out precisely, so skin-colored clothes, wood or a wall are no longer smoothed, and nothing is when no face is in the picture. Smoothing scales with the size of the faces and the skin color is learned from them. A face fades in when found and out when lost, and is kept when it turns to profile. Runs on the CPU beside OBS, with Google's MediaPipe face models.
 
