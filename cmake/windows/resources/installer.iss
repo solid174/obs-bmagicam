@@ -27,8 +27,49 @@ CloseApplications=no
 [Messages]
 WelcomeLabel2=This installs the iPhone Camera plugin for OBS Studio.%n%nClose OBS Studio before you continue.
 
+[CustomMessages]
+PluginInUse=OBS Studio is using the plugin.%n%nClose OBS Studio and wait until it has exited, then click OK to continue, or Cancel to exit.
+
 [Files]
 Source: "{#Source}\obs-bmagicam\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [UninstallDelete]
 Type: dirifempty; Name: "{app}"
+
+[Code]
+// Windows cannot replace or delete a plugin that a program has loaded, and OBS keeps it loaded until its process
+// exits, seconds after its window closes and after it gives up its "OBSStudioCore" mutex. So Setup and Uninstall look
+// at the plugin itself: a loaded DLL cannot be opened for writing.
+function PluginInUse(): Boolean;
+var
+  Plugin: String;
+  Stream: TFileStream;
+begin
+  Result := False;
+  Plugin := ExpandConstant('{commonappdata}\obs-studio\plugins\obs-bmagicam\bin\64bit\obs-bmagicam.dll');
+  if FileExists(Plugin) then
+    try
+      Stream := TFileStream.Create(Plugin, fmOpenReadWrite or fmShareDenyNone);
+      Stream.Free;
+    except
+      Result := True;
+    end;
+end;
+
+// Asks to close OBS until it has let go of the plugin; False when the user cancels
+function WaitForOBS(): Boolean;
+begin
+  Result := True;
+  while Result and PluginInUse() do
+    Result := SuppressibleMsgBox(CustomMessage('PluginInUse'), mbError, MB_OKCANCEL, IDCANCEL) = IDOK;
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := WaitForOBS();
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := WaitForOBS();
+end;

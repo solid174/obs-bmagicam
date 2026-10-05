@@ -125,8 +125,10 @@ Only devices on your local network can connect, and only with the password. Turn
 
 ## Uninstall
 
-- Windows: Settings → Apps → obs-bmagicam (OBS Studio plugin) → Uninstall, or delete `C:\ProgramData\obs-studio\plugins\obs-bmagicam`.
+- Windows: close OBS, then Settings → Apps → obs-bmagicam (OBS Studio plugin) → Uninstall; while OBS is still open, the uninstaller asks you to close it. Or, with OBS closed, delete `C:\ProgramData\obs-studio\plugins\obs-bmagicam`.
 - macOS: delete `obs-bmagicam.plugin` from `~/Library/Application Support/obs-studio/plugins`.
 - Ubuntu: `sudo apt remove obs-bmagicam`.
 
 Before uninstalling, **Restore my settings** if you want your phone exactly as it was.
+
+OBS keeps the plugin's iPhone Camera sources and Beautify filters in your scenes after uninstalling, as entries that do nothing. Delete them in OBS if you do not plan to install the plugin again.

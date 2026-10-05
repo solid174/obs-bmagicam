@@ -10,7 +10,7 @@ Every release ships for Windows, macOS and Linux at once (NFR-3). The build come
 | macOS 12 or newer, universal (Apple Silicon and Intel) | Xcode 26.5, CMake 3.30 | `macos-26` | `.pkg`, signed and notarized |
 | Ubuntu 24.04, x86_64 | GCC 13, Ninja, CMake 3.28 | `ubuntu-24.04` | `.deb` |
 
-The Windows installer is the one addition to the template's packaging: a small Inno Setup script, built in CI, that finds OBS and installs into `C:\ProgramData\obs-studio\plugins\obs-bmagicam`. The `.zip` holds the same files for installing by hand. Inno Setup is preinstalled on GitHub's Windows runners.
+The Windows installer is the one addition to the template's packaging: a small Inno Setup script, built in CI, that finds OBS and installs into `C:\ProgramData\obs-studio\plugins\obs-bmagicam`. Windows cannot replace or delete a plugin OBS has loaded, and OBS keeps it loaded until its process exits, seconds after its window closes and after it gives up its `OBSStudioCore` mutex, so Setup and the uninstaller check the plugin's DLL itself and ask to close OBS until it is free. The `.zip` holds the same files for installing by hand. Inno Setup is preinstalled on GitHub's Windows runners.
 
 Linux packages target OBS from the official PPA or the distribution. OBS from Flatpak needs a Flatpak extension instead, which is not part of 1.0.
 
