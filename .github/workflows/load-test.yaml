@@ -131,7 +131,8 @@ jobs:
           for ($i = 0; $i -lt 120; $i++) {
             $Log = Get-ChildItem -Path $LogDir -Filter '*.txt' -ErrorAction SilentlyContinue |
               Sort-Object LastWriteTime -Descending | Select-Object -First 1
-            if ($Log -and (Select-String -Path $Log.FullName -Pattern '==== Startup complete' -Quiet)) { break }
+            if ($Log -and (Select-String -Path $Log.FullName -Pattern '==== Startup complete' -Quiet) -and
+                (Select-String -Path $Log.FullName -Pattern '\[obs-bmagicam\] Beautify (loaded|cannot load) its face models' -Quiet)) { break }
             if ($Process.HasExited) { break }
             Start-Sleep -Seconds 1
           }
@@ -150,4 +151,7 @@ jobs:
           }
           if (Select-String -Path $Log.FullName -Pattern '\[obs-bmagicam\] Beautify cannot load its effect' -Quiet) {
             throw 'the Beautify effect does not compile with Direct3D 11'
+          }
+          if (-not (Select-String -Path $Log.FullName -Pattern '\[obs-bmagicam\] Beautify loaded its face models' -Quiet)) {
+            throw 'the Beautify filter did not load its face models'
           }
