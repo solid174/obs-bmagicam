@@ -5,6 +5,8 @@
 
 #include "skin-model.hpp"
 #include "style-library.hpp"
+#include "../face/face-geometry.hpp"
+#include "../face/face-tracker.hpp"
 
 #include <graphics/vec2.h>
 #include <graphics/vec4.h>
@@ -17,6 +19,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <iterator>
+#include <memory>
 #include <mutex>
 #include <utility>
 #include <vector>
@@ -36,6 +39,16 @@ constexpr uint64_t kStatsEvery = 6;
 // How fast the skin model and the mask follow the picture
 constexpr float kModelSeconds = 1.5f;
 constexpr float kMaskSeconds = 0.05f;
+// Face tracking looks at frames this often, at most this large on their longer side
+constexpr double kTrackSeconds = 1.0 / 30.0;
+constexpr uint32_t kTrackSize = 960;
+// The mask leaves out eyes, brows and lips grown by these factors, so its soft edge stays off them
+constexpr float kEyeGrowth = 1.4f;
+constexpr float kBrowGrowth = 1.3f;
+constexpr float kLipGrowth = 1.15f;
+// Where faces are tracked, smoothing scales with their width: a face this wide smooths as any picture 1080 high
+// does without tracking, which is about a webcam close-up
+constexpr float kFaceWidth = 400.0f;
 
 BeautifyActions beautify_actions;
 
@@ -73,6 +86,7 @@ private:
 		gs_eparam_t *skin_chroma = nullptr;
 		gs_eparam_t *skin_spread = nullptr;
 		gs_eparam_t *mask_blend = nullptr;
+		gs_eparam_t *face_weight = nullptr;
 		gs_eparam_t *guide_eps = nullptr;
 		gs_eparam_t *smoothing = nullptr;
 		gs_eparam_t *texture_keep = nullptr;
@@ -91,6 +105,8 @@ private:
 	void blur_step(float x, float y);
 	void measure(gs_texture_t *half, gs_texture_t *quarter, uint32_t half_width, uint32_t half_height);
 	void read_stats();
+	void track(gs_texture_t *half, gs_texture_t *quarter, uint32_t width, uint32_t height);
+	float draw_faces(uint32_t width, uint32_t height, float &face_width);
 	void composite(const Look &look, uint32_t width, uint32_t height);
 
 	obs_source_t *context_;
@@ -113,6 +129,16 @@ private:
 	gs_texrender_t *stats_ = nullptr;
 	gs_stagesurf_t *stage_ = nullptr;
 	bool staged_ = false;
+	// Face tracking: frames go to the tracker through a staging surface, and its faces come back as a mask
+	std::unique_ptr<FaceTracker> tracker_;
+	FaceTracker::State tracker_state_ = FaceTracker::State::Starting;
+	gs_texrender_t *track_ = nullptr;
+	gs_stagesurf_t *track_stage_ = nullptr;
+	bool track_staged_ = false;
+	double track_seconds_ = 0;
+	double last_track_ = -1;
+	double clock_ = 0;
+	gs_texrender_t *faces_ = nullptr;
 	// Which of the two masks is this frame's, and whether the other holds the previous frame's
 	int mask_ = 0;
 	bool mask_valid_ = false;
@@ -136,11 +162,12 @@ BeautifyFilter::BeautifyFilter(obs_source_t *context, obs_data_t *settings) : co
 		const auto param = [this](const char *name) {
 			return gs_effect_get_param_by_name(effect_, name);
 		};
-		params_ = {param("image"),        param("image2"),     param("image3"),    param("image4"),
-			   param("blur_step"),    param("block_step"), param("texel"),     param("skin_chroma"),
-			   param("skin_spread"),  param("mask_blend"), param("guide_eps"), param("smoothing"),
-			   param("texture_keep"), param("evening"),    param("sharpen"),   param("glow"),
-			   param("keep_edge"),    param("spot_depth"), param("coring"),    param("mask_view")};
+		params_ = {param("image"),       param("image2"),       param("image3"),      param("image4"),
+			   param("blur_step"),   param("block_step"),   param("texel"),       param("skin_chroma"),
+			   param("skin_spread"), param("mask_blend"),   param("face_weight"), param("guide_eps"),
+			   param("smoothing"),   param("texture_keep"), param("evening"),     param("sharpen"),
+			   param("glow"),        param("keep_edge"),    param("spot_depth"),  param("coring"),
+			   param("mask_view")};
 	} else {
 		obs_log(LOG_WARNING, "Beautify cannot load its effect: %s", errors ? errors : "the file is missing");
 	}
@@ -148,8 +175,8 @@ BeautifyFilter::BeautifyFilter(obs_source_t *context, obs_data_t *settings) : co
 	input_ = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
 	half_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	quarter_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
-	masks_[0] = gs_texrender_create(GS_R16F, GS_ZS_NONE);
-	masks_[1] = gs_texrender_create(GS_R16F, GS_ZS_NONE);
+	masks_[0] = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	masks_[1] = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	guide_half_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	guide_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	coefficients_half_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
@@ -157,8 +184,17 @@ BeautifyFilter::BeautifyFilter(obs_source_t *context, obs_data_t *settings) : co
 	wide_half_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	wide_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
 	stats_ = gs_texrender_create(GS_RGBA16F, GS_ZS_NONE);
+	track_ = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+	faces_ = gs_texrender_create(GS_R8, GS_ZS_NONE);
 	obs_leave_graphics();
 	bfree(path);
+	// The tracker loads its models and starts its thread with the first frame (PWR-1)
+	char *models = obs_module_file("models");
+	if (models)
+		tracker_ = std::make_unique<FaceTracker>(models);
+	else
+		obs_log(LOG_WARNING, "Beautify cannot find its face models; the skin mask follows skin color alone");
+	bfree(models);
 	update(settings);
 }
 
@@ -166,9 +202,10 @@ BeautifyFilter::~BeautifyFilter()
 {
 	obs_enter_graphics();
 	for (gs_texrender_t *texrender : {input_, half_, quarter_, masks_[0], masks_[1], guide_half_, guide_,
-					  coefficients_half_, coefficients_, wide_half_, wide_, stats_})
+					  coefficients_half_, coefficients_, wide_half_, wide_, stats_, track_, faces_})
 		gs_texrender_destroy(texrender);
 	gs_stagesurface_destroy(stage_);
+	gs_stagesurface_destroy(track_stage_);
 	gs_effect_destroy(effect_);
 	obs_leave_graphics();
 }
@@ -189,6 +226,7 @@ void BeautifyFilter::tick(float seconds)
 {
 	frame_seconds_ = seconds;
 	stats_seconds_ += seconds;
+	clock_ += seconds;
 	processed_ = false;
 }
 
@@ -220,6 +258,7 @@ void BeautifyFilter::render()
 		height_ = height;
 		mask_valid_ = false;
 		staged_ = false;
+		track_staged_ = false;
 	}
 	if (!capture(target, parent, width, height)) {
 		obs_source_skip_video_filter(context_);
@@ -241,6 +280,9 @@ void BeautifyFilter::render()
 	gs_texture_t *quarter = gs_texrender_get_texture(quarter_);
 	if (frames_++ % kStatsEvery == 0)
 		measure(half, quarter, half_width, half_height);
+	track(half, quarter, width, height);
+	float face_width = 0;
+	const float face_weight = draw_faces(half_width, half_height, face_width);
 
 	const BeautyAmounts &amounts = look.amounts;
 	const float noise = model_.noise();
@@ -256,12 +298,19 @@ void BeautifyFilter::render()
 	vec2_set(&vector, 1.0f / static_cast<float>(half_width), 1.0f / static_cast<float>(half_height));
 	gs_effect_set_vec2(params_.texel, &vector);
 	gs_texture_t *previous = mask_valid_ ? gs_texrender_get_texture(masks_[mask_]) : half;
+	gs_effect_set_float(params_.face_weight, face_weight);
 	mask_ = 1 - mask_;
-	pass(masks_[mask_], "Mask", half_width, half_height, {{params_.image, half}, {params_.image2, previous}});
+	pass(masks_[mask_], "Mask", half_width, half_height,
+	     {{params_.image, half},
+	      {params_.image2, previous},
+	      {params_.image3, face_weight > 0 ? gs_texrender_get_texture(faces_) : half}});
 	mask_valid_ = true;
 
-	// Fine base: a guided filter on luma, which flattens small detail and keeps contours
-	const float scale = static_cast<float>(height) / 1080.0f;
+	// Fine base: a guided filter on luma, which flattens small detail and keeps contours. Its size follows the
+	// tracked faces (FACE-7), otherwise the picture.
+	const float picture_scale = static_cast<float>(height) / 1080.0f;
+	const float face_scale = face_width * static_cast<float>(width) / kFaceWidth;
+	const float scale = picture_scale + (face_scale - picture_scale) * face_weight;
 	const float spacing = std::max((3.0f + 9.0f * amounts.detail_size) * scale / 6.0f, 0.5f);
 	blur_step(spacing / static_cast<float>(half_width), 0);
 	pass(guide_half_, "GuideH", half_width, half_height,
@@ -388,6 +437,124 @@ void BeautifyFilter::read_stats()
 	gs_stagesurface_unmap(stage_);
 	model_.update(blocks, 1.0f - std::exp(-stats_seconds_ / kModelSeconds));
 	stats_seconds_ = 0;
+}
+
+void BeautifyFilter::track(gs_texture_t *half, gs_texture_t *quarter, uint32_t width, uint32_t height)
+{
+	if (!tracker_)
+		return;
+	const FaceTracker::State state = tracker_->state();
+	if (state != tracker_state_) {
+		tracker_state_ = state;
+		if (state == FaceTracker::State::Running)
+			obs_log(LOG_INFO, "Beautify loaded its face models");
+		else if (state == FaceTracker::State::Failed)
+			obs_log(LOG_WARNING,
+				"Beautify cannot load its face models; the skin mask follows skin color alone");
+	}
+	if (state == FaceTracker::State::Failed)
+		return;
+	// The frame staged last time is ready by now, so reading it never waits for the GPU
+	if (track_staged_ && track_stage_) {
+		track_staged_ = false;
+		uint8_t *data = nullptr;
+		uint32_t linesize = 0;
+		if (gs_stagesurface_map(track_stage_, &data, &linesize)) {
+			const uint32_t frame_width = gs_stagesurface_get_width(track_stage_);
+			const uint32_t frame_height = gs_stagesurface_get_height(track_stage_);
+			std::vector<uint8_t> pixels(static_cast<size_t>(frame_width) * frame_height * 4);
+			for (uint32_t y = 0; y < frame_height; y++)
+				std::memcpy(pixels.data() + static_cast<size_t>(y) * frame_width * 4,
+					    data + static_cast<size_t>(y) * linesize,
+					    static_cast<size_t>(frame_width) * 4);
+			gs_stagesurface_unmap(track_stage_);
+			tracker_->track(std::move(pixels), static_cast<int>(frame_width),
+					static_cast<int>(frame_height), track_seconds_);
+		}
+	}
+	if (clock_ - last_track_ < kTrackSeconds || !tracker_->wants_frame())
+		return;
+	// Scaled down from the copy nearest the tracker's size, so each pixel averages the ones it stands for
+	const float scale =
+		std::min(1.0f, static_cast<float>(kTrackSize) / static_cast<float>(std::max(width, height)));
+	const auto frame_width = static_cast<uint32_t>(std::max(1L, std::lround(width * scale)));
+	const auto frame_height = static_cast<uint32_t>(std::max(1L, std::lround(height * scale)));
+	gs_texture_t *source = scale <= 0.25f ? quarter : scale <= 0.5f ? half : gs_texrender_get_texture(input_);
+	pass(track_, "Downsample", frame_width, frame_height, {{params_.image, source}});
+	if (!track_stage_ || gs_stagesurface_get_width(track_stage_) != frame_width ||
+	    gs_stagesurface_get_height(track_stage_) != frame_height) {
+		gs_stagesurface_destroy(track_stage_);
+		track_stage_ = gs_stagesurface_create(frame_width, frame_height, GS_RGBA);
+	}
+	if (!track_stage_)
+		return;
+	gs_stage_texture(track_stage_, gs_texrender_get_texture(track_));
+	track_staged_ = true;
+	track_seconds_ = clock_;
+	last_track_ = clock_;
+}
+
+// The tracked faces as a mask at the mask's resolution: each face's outline, less its eyes, brows and lips, as bright
+// as the face has faded in. Returns how much the mask counts, the most faded-in face's weight, and the faces' mean
+// width as a share of the picture's.
+float BeautifyFilter::draw_faces(uint32_t width, uint32_t height, float &face_width)
+{
+	const std::vector<TrackedFace> faces = tracker_ ? tracker_->faces() : std::vector<TrackedFace>();
+	float weight = 0;
+	float total = 0;
+	face_width = 0;
+	for (const TrackedFace &face : faces) {
+		weight = std::max(weight, face.weight);
+		total += face.weight;
+		face_width += face.weight * face.width;
+	}
+	if (weight <= 0)
+		return 0;
+	face_width /= total;
+	gs_texrender_reset(faces_);
+	if (!gs_texrender_begin(faces_, width, height))
+		return 0;
+	vec4 color;
+	vec4_zero(&color);
+	gs_clear(GS_CLEAR_COLOR, &color, 0.0f, 0);
+	gs_ortho(0.0f, 1.0f, 0.0f, 1.0f, -100.0f, 100.0f);
+	gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+	gs_eparam_t *color_param = gs_effect_get_param_by_name(solid, "color");
+	// A fan of triangles from the outline's center; the outlines are convex enough for that
+	const auto fill = [&](const std::vector<Point> &points, const int *outline, size_t count, float growth,
+			      float brightness) {
+		Point center;
+		for (size_t i = 0; i < count; i++) {
+			center.x += points[outline[i]].x / static_cast<float>(count);
+			center.y += points[outline[i]].y / static_cast<float>(count);
+		}
+		const auto corner = [&](size_t i) {
+			const Point &point = points[outline[i % count]];
+			gs_vertex2f(center.x + (point.x - center.x) * growth, center.y + (point.y - center.y) * growth);
+		};
+		vec4_set(&color, brightness, brightness, brightness, 1.0f);
+		gs_effect_set_vec4(color_param, &color);
+		while (gs_effect_loop(solid, "Solid")) {
+			gs_render_start(true);
+			for (size_t i = 0; i < count; i++) {
+				gs_vertex2f(center.x, center.y);
+				corner(i);
+				corner(i + 1);
+			}
+			gs_render_stop(GS_TRIS);
+		}
+	};
+	for (const TrackedFace &face : faces)
+		fill(face.landmarks, kFaceOutline.data(), kFaceOutline.size(), 1.0f, face.weight);
+	for (const TrackedFace &face : faces) {
+		fill(face.landmarks, kRightEye.data(), kRightEye.size(), kEyeGrowth, 0.0f);
+		fill(face.landmarks, kLeftEye.data(), kLeftEye.size(), kEyeGrowth, 0.0f);
+		fill(face.landmarks, kRightBrow.data(), kRightBrow.size(), kBrowGrowth, 0.0f);
+		fill(face.landmarks, kLeftBrow.data(), kLeftBrow.size(), kBrowGrowth, 0.0f);
+		fill(face.landmarks, kLips.data(), kLips.size(), kLipGrowth, 0.0f);
+	}
+	gs_texrender_end(faces_);
+	return weight;
 }
 
 void BeautifyFilter::composite(const Look &look, uint32_t width, uint32_t height)

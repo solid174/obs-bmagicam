@@ -48,6 +48,8 @@ target_compile_definitions(
 )
 target_link_libraries(httplib INTERFACE MbedTLS::mbedtls)
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ncnn.cmake")
+
 target_link_libraries(plugin-support PUBLIC OBS::libobs)
 
 target_link_libraries(
@@ -64,9 +66,14 @@ target_link_libraries(
     FFmpeg::avutil
     FFmpeg::swresample
     httplib
+    ncnn
     nlohmann_json::nlohmann_json
     $<$<PLATFORM_ID:Windows>:ws2_32>
 )
+# ncnn is linked in whole; its symbols stay inside the plugin, so other plugins with their own ncnn never mix with it
+if(OS_LINUX)
+  target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -Wl,--exclude-libs,ALL)
+endif()
 target_compile_options(
   ${CMAKE_PROJECT_NAME}
   PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header -Wno-comma>
@@ -103,6 +110,12 @@ target_sources(
     src/camera/values.hpp
     src/discovery/phone-browser.cpp
     src/discovery/phone-browser.hpp
+    src/face/face-geometry.cpp
+    src/face/face-geometry.hpp
+    src/face/face-models.cpp
+    src/face/face-models.hpp
+    src/face/face-tracker.cpp
+    src/face/face-tracker.hpp
     src/filter/beautify-filter.cpp
     src/filter/beautify-filter.hpp
     src/filter/beauty-styles.cpp

@@ -1,0 +1,114 @@
+7767517
+112 131
+Input                    input_0                  0 1 input 0=128 1=128 2=3
+Convolution              convolution_1            1 1 input t3 1=5 11=5 2=1 12=1 3=2 13=2 4=1 14=1 15=2 16=2 5=1 9=0 0=24 6=1800
+ReLU                     relu_2                   1 1 t3 t4
+Split                    split_t4                 1 2 t4 t4_0 t4_1
+ConvolutionDepthWise     convolutiondepthwise_3   1 1 t4_0 t7 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=24 6=216 7=24
+Convolution              convolution_4            1 1 t7 t10 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=24 6=576
+BinaryOp                 binaryop_5               2 1 t4_1 t10 t11 0=0
+ReLU                     relu_6                   1 1 t11 t12
+Split                    split_t12                1 2 t12 t12_0 t12_1
+ConvolutionDepthWise     convolutiondepthwise_7   1 1 t12_0 t15 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=24 6=216 7=24
+Convolution              convolution_8            1 1 t15 t18 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=28 6=672
+Padding                  padding_9                1 1 t12_1 t20 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=4
+BinaryOp                 binaryop_10              2 1 t20 t18 t21 0=0
+ReLU                     relu_11                  1 1 t21 t22
+Split                    split_t22                1 2 t22 t22_0 t22_1
+ConvolutionDepthWise     convolutiondepthwise_12  1 1 t22_0 t25 1=3 11=3 2=1 12=1 3=2 13=2 4=0 14=0 15=1 16=1 5=1 9=0 0=28 6=252 7=28
+Pooling                  pooling_13               1 1 t22_1 t26 0=0 1=2 11=2 2=2 12=2 5=2
+Convolution              convolution_14           1 1 t25 t29 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=32 6=896
+Padding                  padding_15               1 1 t26 t31 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=4
+BinaryOp                 binaryop_16              2 1 t31 t29 t32 0=0
+ReLU                     relu_17                  1 1 t32 t33
+Split                    split_t33                1 2 t33 t33_0 t33_1
+ConvolutionDepthWise     convolutiondepthwise_18  1 1 t33_0 t36 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=32 6=288 7=32
+Convolution              convolution_19           1 1 t36 t39 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=36 6=1152
+Padding                  padding_20               1 1 t33_1 t41 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=4
+BinaryOp                 binaryop_21              2 1 t41 t39 t42 0=0
+ReLU                     relu_22                  1 1 t42 t43
+Split                    split_t43                1 2 t43 t43_0 t43_1
+ConvolutionDepthWise     convolutiondepthwise_23  1 1 t43_0 t46 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=36 6=324 7=36
+Convolution              convolution_24           1 1 t46 t49 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=42 6=1512
+Padding                  padding_25               1 1 t43_1 t51 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=6
+BinaryOp                 binaryop_26              2 1 t51 t49 t52 0=0
+ReLU                     relu_27                  1 1 t52 t53
+Split                    split_t53                1 2 t53 t53_0 t53_1
+ConvolutionDepthWise     convolutiondepthwise_28  1 1 t53_0 t56 1=3 11=3 2=1 12=1 3=2 13=2 4=0 14=0 15=1 16=1 5=1 9=0 0=42 6=378 7=42
+Pooling                  pooling_29               1 1 t53_1 t57 0=0 1=2 11=2 2=2 12=2 5=2
+Convolution              convolution_30           1 1 t56 t60 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=48 6=2016
+Padding                  padding_31               1 1 t57 t62 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=6
+BinaryOp                 binaryop_32              2 1 t62 t60 t63 0=0
+ReLU                     relu_33                  1 1 t63 t64
+Split                    split_t64                1 2 t64 t64_0 t64_1
+ConvolutionDepthWise     convolutiondepthwise_34  1 1 t64_0 t67 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=48 6=432 7=48
+Convolution              convolution_35           1 1 t67 t70 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=56 6=2688
+Padding                  padding_36               1 1 t64_1 t72 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=8
+BinaryOp                 binaryop_37              2 1 t72 t70 t73 0=0
+ReLU                     relu_38                  1 1 t73 t74
+Split                    split_t74                1 2 t74 t74_0 t74_1
+ConvolutionDepthWise     convolutiondepthwise_39  1 1 t74_0 t77 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=56 6=504 7=56
+Convolution              convolution_40           1 1 t77 t80 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=64 6=3584
+Padding                  padding_41               1 1 t74_1 t82 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=8
+BinaryOp                 binaryop_42              2 1 t82 t80 t83 0=0
+ReLU                     relu_43                  1 1 t83 t84
+Split                    split_t84                1 2 t84 t84_0 t84_1
+ConvolutionDepthWise     convolutiondepthwise_44  1 1 t84_0 t87 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=64 6=576 7=64
+Convolution              convolution_45           1 1 t87 t90 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=72 6=4608
+Padding                  padding_46               1 1 t84_1 t92 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=8
+BinaryOp                 binaryop_47              2 1 t92 t90 t93 0=0
+ReLU                     relu_48                  1 1 t93 t94
+Split                    split_t94                1 2 t94 t94_0 t94_1
+ConvolutionDepthWise     convolutiondepthwise_49  1 1 t94_0 t97 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=72 6=648 7=72
+Convolution              convolution_50           1 1 t97 t100 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=80 6=5760
+Padding                  padding_51               1 1 t94_1 t102 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=8
+BinaryOp                 binaryop_52              2 1 t102 t100 t103 0=0
+ReLU                     relu_53                  1 1 t103 t104
+Split                    split_t104               1 2 t104 t104_0 t104_1
+ConvolutionDepthWise     convolutiondepthwise_54  1 1 t104_0 t107 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=80 6=720 7=80
+Convolution              convolution_55           1 1 t107 t110 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=88 6=7040
+Padding                  padding_56               1 1 t104_1 t112 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=8
+BinaryOp                 binaryop_57              2 1 t112 t110 t113 0=0
+ReLU                     relu_58                  1 1 t113 t114
+Split                    split_t114               1 4 t114 t114_0 t114_1 t114_2 t114_3
+ConvolutionDepthWise     convolutiondepthwise_59  1 1 t114_0 t117 1=3 11=3 2=1 12=1 3=2 13=2 4=0 14=0 15=1 16=1 5=1 9=0 0=88 6=792 7=88
+Pooling                  pooling_60               1 1 t114_1 t118 0=0 1=2 11=2 2=2 12=2 5=2
+Convolution              convolution_61           1 1 t117 t121 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=96 6=8448
+Padding                  padding_62               1 1 t118 t123 0=0 1=0 2=0 3=0 4=0 5=0.000000e+00 7=0 8=8
+BinaryOp                 binaryop_63              2 1 t123 t121 t124 0=0
+ReLU                     relu_64                  1 1 t124 t125
+Split                    split_t125               1 2 t125 t125_0 t125_1
+ConvolutionDepthWise     convolutiondepthwise_65  1 1 t125_0 t128 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=96 6=864 7=96
+Convolution              convolution_66           1 1 t128 t131 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=96 6=9216
+BinaryOp                 binaryop_67              2 1 t125_1 t131 t132 0=0
+ReLU                     relu_68                  1 1 t132 t133
+Split                    split_t133               1 2 t133 t133_0 t133_1
+ConvolutionDepthWise     convolutiondepthwise_69  1 1 t133_0 t136 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=96 6=864 7=96
+Convolution              convolution_70           1 1 t136 t139 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=96 6=9216
+BinaryOp                 binaryop_71              2 1 t133_1 t139 t140 0=0
+ReLU                     relu_72                  1 1 t140 t141
+Split                    split_t141               1 2 t141 t141_0 t141_1
+ConvolutionDepthWise     convolutiondepthwise_73  1 1 t141_0 t144 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=96 6=864 7=96
+Convolution              convolution_74           1 1 t144 t147 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=96 6=9216
+BinaryOp                 binaryop_75              2 1 t141_1 t147 t148 0=0
+ReLU                     relu_76                  1 1 t148 t149
+Split                    split_t149               1 2 t149 t149_0 t149_1
+ConvolutionDepthWise     convolutiondepthwise_77  1 1 t149_0 t152 1=3 11=3 2=1 12=1 3=1 13=1 4=1 14=1 15=1 16=1 5=1 9=0 0=96 6=864 7=96
+Convolution              convolution_78           1 1 t152 t155 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=96 6=9216
+BinaryOp                 binaryop_79              2 1 t149_1 t155 t156 0=0
+ReLU                     relu_80                  1 1 t156 t157
+Split                    split_t157               1 2 t157 t157_0 t157_1
+Convolution              convolution_81           1 1 t114_2 t160 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=2 6=176
+Convolution              convolution_82           1 1 t157_0 t163 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=6 6=576
+Convolution              convolution_83           1 1 t114_3 t166 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=32 6=2816
+Convolution              convolution_84           1 1 t157_1 t169 1=1 11=1 2=1 12=1 3=1 13=1 4=0 14=0 15=0 16=0 5=1 9=0 0=96 6=9216
+Permute                  permute_85               1 1 t160 t170_hwc 0=3
+Reshape                  reshape_86               1 1 t170_hwc t170 0=1 1=512
+Permute                  permute_87               1 1 t163 t171_hwc 0=3
+Reshape                  reshape_88               1 1 t171_hwc t171 0=1 1=384
+Permute                  permute_89               1 1 t166 t172_hwc 0=3
+Reshape                  reshape_90               1 1 t172_hwc t172 0=16 1=512
+Permute                  permute_91               1 1 t169 t173_hwc 0=3
+Reshape                  reshape_92               1 1 t173_hwc t173 0=16 1=384
+Concat                   concat_93                2 1 t170 t171 scores 0=0
+Concat                   concat_94                2 1 t172 t173 regressors 0=0

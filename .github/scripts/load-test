@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Starts OBS, waits until its startup is complete, stops it, and checks in its log that obs-bmagicam loaded and
-# that the Beautify filter in the test scene collection (load-test-scenes.json) compiled its effect.
+# Starts OBS, waits until its startup is complete and the Beautify filter in the test scene collection
+# (load-test-scenes.json) has loaded its face models, stops it, and checks in its log that obs-bmagicam loaded,
+# that the filter compiled its effect and that it found and loaded its face models.
 #
 # Usage: load-test <log directory> <OBS process name> <command that starts OBS...>
 
@@ -21,7 +22,8 @@ for _ in $(seq 1 120); do
   log=$(ls -t "${log_dir}"/*.txt 2> /dev/null | head -n 1 || true)
   if [[ ${log} == "${previous}" ]]; then
     log=''
-  elif [[ -n ${log} ]] && grep -q '==== Startup complete' "${log}"; then
+  elif [[ -n ${log} ]] && grep -q '==== Startup complete' "${log}" &&
+    grep -qE '\[obs-bmagicam\] Beautify (loaded|cannot load) its face models' "${log}"; then
     break
   fi
   if ! kill -0 "${obs_pid}" 2> /dev/null; then
@@ -58,5 +60,10 @@ fi
 
 if grep -q '\[obs-bmagicam\] Beautify cannot load its effect' "${log}"; then
   echo '::error::the Beautify effect does not compile with this renderer'
+  exit 1
+fi
+
+if ! grep -q '\[obs-bmagicam\] Beautify loaded its face models' "${log}"; then
+  echo '::error::the Beautify filter did not load its face models'
   exit 1
 fi

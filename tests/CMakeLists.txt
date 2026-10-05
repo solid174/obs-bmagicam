@@ -17,6 +17,8 @@ target_sources(
     test-main.cpp
     access-test.cpp
     beauty-styles-test.cpp
+    face-geometry-test.cpp
+    face-tracking-test.cpp
     lag-estimate-test.cpp
     looks-test.cpp
     media-clock-test.cpp
@@ -28,6 +30,9 @@ target_sources(
     ../src/camera/streaming-xml.cpp
     ../src/filter/beauty-styles.cpp
     ../src/filter/skin-model.cpp
+    ../src/face/face-geometry.cpp
+    ../src/face/face-models.cpp
+    ../src/face/face-tracker.cpp
     ../src/stream/media-clock.cpp
     ../src/phone/write-queue.cpp
     ../src/remote/access.cpp
@@ -39,8 +44,10 @@ target_compile_definitions(
   PRIVATE
     LOOKS_FILE="${CMAKE_SOURCE_DIR}/data/looks/builtin.json"
     STYLES_FILE="${CMAKE_SOURCE_DIR}/data/beauty/styles.json"
+    MODELS_DIR="${CMAKE_SOURCE_DIR}/data/models"
+    FACE_IMAGE="${CMAKE_CURRENT_SOURCE_DIR}/data/face.ppm"
 )
-target_link_libraries(obs-bmagicam-tests PRIVATE doctest::doctest nlohmann_json::nlohmann_json FFmpeg::avutil)
+target_link_libraries(obs-bmagicam-tests PRIVATE doctest::doctest nlohmann_json::nlohmann_json FFmpeg::avutil ncnn)
 
 add_test(NAME obs-bmagicam-tests COMMAND obs-bmagicam-tests)
 

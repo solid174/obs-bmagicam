@@ -22,6 +22,8 @@ uniform float2 texel;
 uniform float2 skin_chroma;
 uniform float2 skin_spread;
 uniform float mask_blend;
+// How much the tracked faces' mask replaces the color mask, 0 while no face is tracked
+uniform float face_weight;
 
 // Guided filter: variances below about this are smoothed, larger ones are edges
 uniform float guide_eps;
@@ -87,7 +89,9 @@ float4 PSDownsample(VertData v_in) : TARGET
 }
 
 // Skin likelihood from hue and saturation against the skin's, gated by luma, and blended with the previous
-// frame's mask so nothing flickers. Saturation is compared as a ratio, so it holds at every exposure.
+// frame's mask so nothing flickers. Saturation is compared as a ratio, so it holds at every exposure. Red keeps the
+// color mask for the next frame; green is the mask the passes use, which follows tracked faces where there are
+// any: their outlines less eyes, brows and lips, where color only weighs how much.
 float4 PSMask(VertData v_in) : TARGET
 {
 	float4 h = image.Sample(linearClamp, v_in.uv);
@@ -113,7 +117,8 @@ float4 PSMask(VertData v_in) : TARGET
 	float raw = smoothstep(0.12, 0.6, likelihood) * gate;
 	float previous = image2.Sample(linearClamp, v_in.uv).r;
 	float m = lerp(previous, raw, mask_blend);
-	return float4(m, m, m, m);
+	float face = image3.Sample(linearClamp, v_in.uv).r;
+	return float4(m, lerp(m, face * lerp(0.45, 1.0, m), face_weight), 0.0, 1.0);
 }
 
 // Guided filter, first half: horizontal means of luma, luma squared and the mask
@@ -125,7 +130,7 @@ float4 PSGuideH(VertData v_in) : TARGET
 		float w = tap_weight(i);
 		float2 uv = v_in.uv + blur_step * float(i);
 		float y = image.Sample(linearClamp, uv).a;
-		float m = image2.Sample(linearClamp, uv).r;
+		float m = image2.Sample(linearClamp, uv).g;
 		sum += w * float3(y, y * y, m);
 		total += w;
 	}
